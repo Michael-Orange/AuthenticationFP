@@ -7,10 +7,8 @@ import cookieParser from "cookie-parser";
 import { getUserApps, type AuthUser, type AppInfo } from "@shared/schema";
 
 const DEFAULT_APPS: AppInfo[] = [
-  { id: "stock", name: "Gestion Stock", url: "https://stock.replit.app", icon: "📦", description: "Gestion des stocks et inventaire" },
-  { id: "prix", name: "Prix Référentiel", url: "https://prix.replit.app", icon: "💰", description: "Référentiel des prix produits" },
-  { id: "factures", name: "Gestion Factures", url: "https://factures.replit.app", icon: "📄", description: "Facturation et suivi comptable" },
-  { id: "maintenance", name: "Maintenance", url: "https://maintenance.replit.app", icon: "🔧", description: "Suivi de maintenance technique" },
+  { id: "stock", name: "Gestion Stock", url: "https://stock.filtreplante.com", icon: "📦", description: "Gestion des stocks et inventaire" },
+  { id: "prix", name: "Prix Référentiel", url: "https://produit.filtreplante.com", icon: "💰", description: "Référentiel des prix produits" },
 ];
 
 function getAvailableApps(): AppInfo[] {
