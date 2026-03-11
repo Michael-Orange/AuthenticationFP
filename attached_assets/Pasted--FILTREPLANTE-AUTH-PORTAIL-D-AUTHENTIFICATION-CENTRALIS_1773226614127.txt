@@ -1,0 +1,689 @@
+ 🔐 FILTREPLANTE-AUTH - PORTAIL D'AUTHENTIFICATION CENTRALISÉE
+
+## OBJECTIF
+Créer un portail d'authentification unique (SSO) pour toutes les applications internes FiltrePlante. Cette app gère la connexion centralisée, la vérification des permissions et la génération de tokens SSO pour rediriger les utilisateurs vers les apps autorisées.
+
+## CONTEXTE BUSINESS
+Actuellement, FiltrePlante a plusieurs apps internes (Stock, Prix Référentiel, Factures, Maintenance). Les utilisateurs ont des accès différenciés selon leur rôle. Cette app Auth centralisée permet :
+- ✅ Un seul login pour toutes les apps (SSO)
+- ✅ Gestion centralisée des permissions
+- ✅ Expérience utilisateur fluide (pas de re-login entre apps)
+- ✅ Architecture scalable pour futures apps
+
+## STACK TECHNIQUE
+
+**Frontend :**
+- React + TypeScript + Vite
+- Tailwind CSS + FiltrePlante Design System
+
+**Backend :**
+- Node.js + Express
+- PostgreSQL (Neon) - Base de données partagée
+- JWT (jsonwebtoken) pour authentification
+- CryptoJS pour hashage mot de passe (compatibilité avec apps existantes)
+- cookie-parser pour gestion sessions
+
+**Hébergement :**
+- Replit Autoscale
+- URL cible : `auth-filtreplante.replit.app`
+
+## ARCHITECTURE GLOBALE
+
+```
+FiltrePlante-Auth (auth-filtreplante.replit.app)
+├── /login                    → Page de connexion (username/password)
+├── /dashboard                → Mes applications (après login)
+├── /api/auth/login           → Endpoint connexion
+├── /api/auth/logout          → Endpoint déconnexion
+├── /api/auth/me              → Vérifier session Auth courante
+├── /api/sso/generate         → Générer token SSO pour une app
+└── Session Auth (cookie)     → auth_session (7 jours)
+
+Apps clientes (Stock, Prix, Factures, etc.)
+├── Détecte pas de session → Redirect vers Auth
+├── /sso/login?token=XXX   → Endpoint réception token SSO
+└── Valide token → Crée session app
+```
+
+## FLOW UTILISATEUR COMPLET
+
+### Scénario 1 : Premier accès à une app (ex: Stock)
+
+1. User tape `stock.replit.app`
+2. Stock détecte : Pas de cookie `auth_token`
+3. Stock redirige vers `auth-filtreplante.replit.app/login?redirect=stock`
+4. Auth affiche page login
+5. User entre username/password
+6. Auth vérifie credentials + permissions pour "stock"
+7. Si autorisé :
+   - Crée session Auth (cookie `auth_session` sur auth-filtreplante.replit.app)
+   - Génère token JWT SSO
+   - Redirige vers `stock.replit.app/sso/login?token=XXX`
+8. Stock valide token et crée session locale
+9. ✅ User connecté sur Stock
+
+### Scénario 2 : Accès à une autre app (ex: Prix) - SSO automatique
+
+1. User tape `prix.replit.app`
+2. Prix détecte : Pas de cookie `auth_token`
+3. Prix redirige vers `auth-filtreplante.replit.app/login?redirect=prix`
+4. **Auth détecte : Session Auth valide (cookie auth_session existe)**
+5. **Pas de page login affichée !**
+6. Auth génère directement token JWT SSO pour "prix"
+7. Redirige vers `prix.replit.app/sso/login?token=XXX`
+8. Prix valide token et crée session locale
+9. ✅ User connecté sur Prix (SANS retaper mot de passe)
+
+### Scénario 3 : Dashboard "Mes Applications"
+
+1. User connecté sur Auth clique "Mes Applications"
+2. Auth affiche cartes des apps autorisées selon `user.apps`
+3. User clique sur une app (ex: "Factures")
+4. Auth génère token SSO
+5. Redirige vers `factures.replit.app/sso/login?token=XXX`
+6. ✅ Accès direct sans login
+
+## SPÉCIFICATIONS DÉTAILLÉES
+
+### 1. BASE DE DONNÉES (NEON - DÉJÀ EXISTANTE)
+
+**Table utilisée : `referentiel.users`**
+
+⚠️ **NE PAS CRÉER** de nouvelle table users - utiliser la table partagée existante.
+
+**Structure (référence) :**
+```sql
+referentiel.users
+├── id (integer, PK)
+├── username (text, unique)
+├── nom (text)
+├── password_hash (text)  -- Hashé avec CryptoJS
+├── role (text)           -- 'admin' ou 'user'
+├── apps (text[])         -- Array ex: ['stock', 'prix', 'factures']
+├── last_login (timestamp)
+├── created_at (timestamp)
+└── updated_at (timestamp)
+```
+
+**Exemples de données :**
+```
+id=1, username='michael', role='admin', apps=['stock','prix'] → Accès à toutes apps
+id=2, username='cheikh', role='user', apps=['stock'] → Accès Stock uniquement
+id=3, username='fatou', role='user', apps=['stock','prix'] → Accès Stock + Prix
+```
+
+### 2. VARIABLES D'ENVIRONNEMENT
+
+```env
+# Base de données Neon (partagée avec toutes les apps)
+DATABASE_URL=postgresql://user:password@neon-host/dbname
+
+# Secret JWT (DOIT être identique sur TOUTES les apps FiltrePlante)
+JWT_SECRET=<secret_partagé>
+
+# Environnement
+NODE_ENV=production
+
+# Liste des applications supportées (JSON)
+AVAILABLE_APPS=[
+  {"id":"stock","name":"Gestion Stock","url":"https://stock.replit.app","icon":"📦"},
+  {"id":"prix","name":"Prix Référentiel","url":"https://prix.replit.app","icon":"💰"},
+  {"id":"factures","name":"Gestion Factures","url":"https://factures.replit.app","icon":"📄"},
+  {"id":"maintenance","name":"Maintenance","url":"https://maintenance.replit.app","icon":"🔧"}
+]
+```
+
+### 3. INTERFACE UTILISATEUR
+
+#### Page Login (/login)
+
+**Layout :**
+- Header avec logo FiltrePlante + gradient (Design System)
+- Carte centrée avec formulaire
+- Input username (focus auto)
+- Input password (type password, visible toggle optionnel)
+- Bouton "Se connecter" (primary)
+- Message d'erreur si échec (alert danger)
+
+**Exemple visuel (CSS) :**
+```html
+<div class="min-h-screen bg-fp-bg flex items-center justify-center">
+  <div class="bg-white rounded-fp shadow-fp-lg p-8 max-w-md w-full">
+    <div class="text-center mb-6">
+      <h1 class="text-3xl font-heading font-bold text-fp-dark">FiltrePlante</h1>
+      <p class="text-fp-gray mt-2">Portail d'authentification</p>
+    </div>
+    
+    <form>
+      <div class="mb-4">
+        <label class="block font-heading font-semibold text-fp-dark mb-2">
+          Nom d'utilisateur
+        </label>
+        <input 
+          type="text" 
+          name="username"
+          class="w-full border border-gray-300 rounded-fp-sm px-3 py-2 focus:outline-none focus:border-fp-primary focus:ring-2 focus:ring-fp-primary focus:ring-opacity-20"
+          placeholder="Votre identifiant"
+          autoFocus
+        />
+      </div>
+      
+      <div class="mb-6">
+        <label class="block font-heading font-semibold text-fp-dark mb-2">
+          Mot de passe
+        </label>
+        <input 
+          type="password"
+          name="password" 
+          class="w-full border border-gray-300 rounded-fp-sm px-3 py-2 focus:outline-none focus:border-fp-primary focus:ring-2 focus:ring-fp-primary focus:ring-opacity-20"
+          placeholder="••••••••"
+        />
+      </div>
+      
+      <button 
+        type="submit"
+        class="w-full bg-fp-primary hover:bg-fp-primary-hover text-white font-heading font-semibold py-3 rounded-fp-sm transition"
+      >
+        Se connecter
+      </button>
+    </form>
+  </div>
+</div>
+```
+
+#### Dashboard "Mes Applications" (/dashboard)
+
+**Layout :**
+- Header avec nom user + bouton déconnexion
+- Titre "Mes applications"
+- Grille de cartes (apps autorisées uniquement)
+- Chaque carte : Icône + Nom + Description + Bouton "Accéder"
+
+**Logique :**
+```typescript
+// Filtrer apps selon permissions user
+const user = await getCurrentUser(); // { id, nom, role, apps: ['stock', 'prix'] }
+
+const availableApps = role === 'admin' 
+  ? ALL_APPS // Admin voit tout
+  : ALL_APPS.filter(app => user.apps.includes(app.id));
+
+// Afficher cartes
+availableApps.map(app => (
+  <div class="bg-white rounded-fp shadow-fp hover:shadow-fp-lg transition p-6 cursor-pointer"
+       onClick={() => handleAppAccess(app.id, app.url)}>
+    <div class="text-4xl mb-3">{app.icon}</div>
+    <h3 class="text-xl font-heading font-semibold text-fp-dark">{app.name}</h3>
+    <button class="mt-4 bg-fp-primary hover:bg-fp-primary-hover text-white font-heading px-4 py-2 rounded-fp-sm">
+      Accéder →
+    </button>
+  </div>
+));
+```
+
+### 4. ENDPOINTS BACKEND
+
+#### POST /api/auth/login
+
+**Entrée :**
+```json
+{
+  "username": "michael",
+  "password": "password123"
+}
+```
+
+**Logique :**
+1. Vérifier username existe dans `referentiel.users`
+2. Comparer password avec `password_hash` (CryptoJS)
+3. Si credentials valides :
+   - Créer cookie `auth_session` (httpOnly, 7 jours)
+   - Payload : `{ userId, username, nom, role, apps }`
+   - Retourner user info
+4. Si échec : 401 "Identifiants invalides"
+
+**Sortie (succès) :**
+```json
+{
+  "success": true,
+  "user": {
+    "id": 1,
+    "username": "michael",
+    "nom": "Michael",
+    "role": "admin",
+    "apps": ["stock", "prix"]
+  }
+}
+```
+
+**Implémentation :**
+```typescript
+router.post('/api/auth/login', async (req, res) => {
+  const { username, password } = req.body;
+  
+  try {
+    // 1. Récupérer user
+    const result = await db.query(
+      'SELECT * FROM referentiel.users WHERE username = $1',
+      [username]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: "Identifiants invalides" });
+    }
+    
+    const user = result.rows[0];
+    
+    // 2. Vérifier password (CryptoJS - compatibilité apps existantes)
+    const isPasswordValid = verifyPassword(password, user.password_hash);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: "Identifiants invalides" });
+    }
+    
+    // 3. Mettre à jour last_login
+    await db.query(
+      'UPDATE referentiel.users SET last_login = NOW() WHERE id = $1',
+      [user.id]
+    );
+    
+    // 4. Créer session Auth (cookie de l'app Auth)
+    const sessionPayload = {
+      userId: user.id,
+      username: user.username,
+      nom: user.nom,
+      role: user.role,
+      apps: user.apps
+    };
+    
+    const sessionToken = jwt.sign(sessionPayload, process.env.JWT_SECRET!, {
+      expiresIn: '7d'
+    });
+    
+    res.cookie('auth_session', sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 jours
+    });
+    
+    // 5. Retourner user info (sans password_hash)
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        nom: user.nom,
+        role: user.role,
+        apps: user.apps
+      }
+    });
+    
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+```
+
+#### GET /api/auth/me
+
+**But :** Vérifier si session Auth valide existe
+
+**Logique :**
+1. Lire cookie `auth_session`
+2. Vérifier JWT valide
+3. Retourner user info OU 401
+
+**Sortie :**
+```json
+{
+  "id": 1,
+  "username": "michael",
+  "nom": "Michael",
+  "role": "admin",
+  "apps": ["stock", "prix"]
+}
+```
+
+#### POST /api/auth/logout
+
+**Logique :**
+1. Supprimer cookie `auth_session`
+2. Retourner succès
+
+**Implémentation :**
+```typescript
+router.post('/api/auth/logout', (req, res) => {
+  res.clearCookie('auth_session');
+  res.json({ success: true });
+});
+```
+
+#### GET /api/sso/generate?app=stock
+
+**But :** Générer token SSO pour rediriger vers une app cible
+
+**Paramètres :**
+- `app` (query) : ID de l'app cible ("stock", "prix", "factures", etc.)
+
+**Logique :**
+1. Vérifier session Auth valide (cookie auth_session)
+2. Vérifier permissions : user.apps contient `app` OU role === 'admin'
+3. Si autorisé : Générer token JWT SSO (même structure, expiration courte 5 min)
+4. Si refusé : 403 "Accès refusé"
+
+**Sortie :**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "redirectUrl": "https://stock.replit.app/sso/login"
+}
+```
+
+**Implémentation :**
+```typescript
+router.get('/api/sso/generate', async (req, res) => {
+  const { app } = req.query;
+  
+  if (!app) {
+    return res.status(400).json({ error: "Paramètre 'app' requis" });
+  }
+  
+  // 1. Vérifier session Auth
+  const sessionToken = req.cookies.auth_session;
+  if (!sessionToken) {
+    return res.status(401).json({ error: "Non authentifié" });
+  }
+  
+  try {
+    // 2. Décoder session
+    const user = jwt.verify(sessionToken, process.env.JWT_SECRET!) as any;
+    
+    // 3. Vérifier permission pour l'app demandée
+    const hasAccess = user.apps.includes(app) || user.role === 'admin';
+    if (!hasAccess) {
+      return res.status(403).json({ 
+        error: `Vous n'avez pas accès à ${app}. Contactez l'administrateur.` 
+      });
+    }
+    
+    // 4. Trouver URL de l'app
+    const availableApps = JSON.parse(process.env.AVAILABLE_APPS || '[]');
+    const targetApp = availableApps.find((a: any) => a.id === app);
+    
+    if (!targetApp) {
+      return res.status(404).json({ error: "Application inconnue" });
+    }
+    
+    // 5. Générer token SSO (expiration courte : 5 min)
+    const ssoToken = jwt.sign(
+      {
+        userId: user.userId,
+        username: user.username,
+        nom: user.nom,
+        role: user.role,
+        apps: user.apps
+      },
+      process.env.JWT_SECRET!,
+      { expiresIn: '5m' } // Token SSO expire rapidement
+    );
+    
+    res.json({
+      token: ssoToken,
+      redirectUrl: `${targetApp.url}/sso/login`
+    });
+    
+  } catch (error) {
+    console.error('SSO generation error:', error);
+    res.status(401).json({ error: "Session invalide" });
+  }
+});
+```
+
+#### GET /login?redirect=stock
+
+**But :** Page de login avec redirection automatique après succès
+
+**Logique frontend :**
+```typescript
+// Extraire paramètre redirect
+const params = new URLSearchParams(window.location.search);
+const redirectApp = params.get('redirect'); // "stock"
+
+// Après login réussi
+const handleLoginSuccess = async () => {
+  if (redirectApp) {
+    // Générer token SSO et rediriger
+    const response = await fetch(`/api/sso/generate?app=${redirectApp}`);
+    const { token, redirectUrl } = await response.json();
+    
+    if (response.ok) {
+      window.location.href = `${redirectUrl}?token=${token}`;
+    } else {
+      // Erreur permission
+      setError("Vous n'avez pas accès à cette application");
+    }
+  } else {
+    // Pas de redirect, aller au dashboard
+    navigate('/dashboard');
+  }
+};
+```
+
+**Cas particulier - Session Auth déjà valide :**
+```typescript
+// Au chargement de /login
+useEffect(() => {
+  const checkExistingSession = async () => {
+    const response = await fetch('/api/auth/me');
+    
+    if (response.ok) {
+      // Session Auth valide, skip login
+      if (redirectApp) {
+        // Générer token SSO et rediriger directement
+        const ssoResponse = await fetch(`/api/sso/generate?app=${redirectApp}`);
+        const { token, redirectUrl } = await ssoResponse.json();
+        window.location.href = `${redirectUrl}?token=${token}`;
+      } else {
+        navigate('/dashboard');
+      }
+    }
+  };
+  
+  checkExistingSession();
+}, []);
+```
+
+### 5. SÉCURITÉ
+
+**Cookies :**
+```typescript
+// Cookie session Auth (pour l'app Auth)
+res.cookie('auth_session', token, {
+  httpOnly: true,           // Protection XSS
+  secure: true,             // HTTPS only en production
+  sameSite: 'lax',         // Protection CSRF
+  maxAge: 7 * 24 * 60 * 60 * 1000  // 7 jours
+});
+```
+
+**JWT :**
+- Session Auth : Expiration 7 jours
+- Token SSO : Expiration 5 minutes (usage unique)
+- Secret partagé avec toutes les apps (JWT_SECRET)
+
+**Password hashing (CryptoJS - compatibilité) :**
+```typescript
+import CryptoJS from 'crypto-js';
+
+function verifyPassword(plainPassword: string, hash: string): boolean {
+  const computedHash = CryptoJS.SHA256(plainPassword).toString();
+  return computedHash === hash;
+}
+```
+
+**Protection CORS :**
+```typescript
+// Autoriser uniquement les apps FiltrePlante
+const allowedOrigins = [
+  'https://stock.replit.app',
+  'https://prix.replit.app',
+  'https://factures.replit.app',
+  // etc.
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
+```
+
+### 6. DESIGN - UTILISER FILTREPLANTE DESIGN SYSTEM
+
+**1. Copier `tailwind-preset.js`** depuis Replit "Charte-Graphique-FP"
+
+**2. Configuration Tailwind :**
+```typescript
+import fpPreset from './tailwind-preset.js';
+
+export default {
+  presets: [fpPreset],
+  content: ['./client/**/*.{ts,tsx}'],
+}
+```
+
+**3. Importer Google Fonts :**
+```html
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+```
+
+**4. Utiliser classes FiltrePlante :**
+- Couleurs : `bg-fp-primary`, `text-fp-dark`, `bg-fp-bg`
+- Typographie : `font-heading`, `font-body`
+- Boutons : `bg-fp-primary hover:bg-fp-primary-hover`
+- Cartes : `rounded-fp shadow-fp`
+
+### 7. STRUCTURE FICHIERS
+
+```
+filtreplante-auth/
+├── client/
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── Login.tsx           # Page login
+│   │   │   └── Dashboard.tsx       # Mes applications
+│   │   ├── components/
+│   │   │   ├── AppCard.tsx         # Carte application
+│   │   │   └── Header.tsx          # Header avec logout
+│   │   ├── lib/
+│   │   │   └── api.ts              # Fonctions API
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   └── index.html
+├── server/
+│   ├── routes/
+│   │   ├── auth.ts                 # Login, logout, me
+│   │   └── sso.ts                  # Génération tokens SSO
+│   ├── middleware/
+│   │   └── auth.ts                 # Vérification session
+│   ├── utils/
+│   │   ├── db.ts                   # Connexion Neon
+│   │   └── password.ts             # CryptoJS helpers
+│   └── index.ts                    # Serveur Express
+├── tailwind-preset.js              # Design System FiltrePlante
+├── tailwind.config.ts
+├── package.json
+├── .env
+└── README.md
+```
+
+### 8. POINTS D'ATTENTION
+
+⚠️ **JWT_SECRET** : Utiliser le MÊME secret que les apps existantes (Stock, Prix)
+⚠️ **password_hash** : Utiliser CryptoJS (SHA256) pour compatibilité
+⚠️ **Cookies sameSite** : Utiliser 'lax' pour permettre redirections entre domaines
+⚠️ **Token SSO** : Expiration courte (5 min) pour sécurité
+⚠️ **AVAILABLE_APPS** : Mettre à jour quand nouvelle app ajoutée
+⚠️ **Permissions** : Toujours vérifier `user.apps.includes(appId)` sauf si admin
+
+### 9. ROUTES FRONTEND (REACT ROUTER)
+
+```typescript
+<Routes>
+  <Route path="/login" element={<Login />} />
+  <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+  <Route path="/" element={<Navigate to="/dashboard" replace />} />
+</Routes>
+```
+
+### 10. TESTS À EFFECTUER POST-IMPLÉMENTATION
+
+**Test 1 : Login basique**
+- [ ] Page login s'affiche correctement
+- [ ] Login avec credentials valides → Dashboard
+- [ ] Login avec credentials invalides → Erreur claire
+- [ ] Cookie `auth_session` créé après login
+
+**Test 2 : SSO vers app (ex: Stock)**
+- [ ] Depuis dashboard, clic "Stock" → Redirect vers stock.replit.app/sso/login?token=XXX
+- [ ] Token valide et permissions OK → Connexion automatique sur Stock
+- [ ] User sans permission "stock" → Erreur 403
+
+**Test 3 : Redirect depuis app**
+- [ ] Taper stock.replit.app sans session → Redirect vers auth.filtreplante.repl.co/login?redirect=stock
+- [ ] Après login → Retour automatique sur Stock
+
+**Test 4 : SSO automatique (session Auth valide)**
+- [ ] Connecté sur Stock via Auth
+- [ ] Taper prix.replit.app → Connexion automatique (pas de re-login)
+
+**Test 5 : Permissions**
+- [ ] User "cheikh" (apps: ['stock']) ne peut pas accéder à Prix
+- [ ] Admin peut accéder à toutes les apps
+- [ ] Message d'erreur clair si accès refusé
+
+**Test 6 : Logout**
+- [ ] Bouton logout → Cookie supprimé
+- [ ] Redirect vers /login
+- [ ] Accès dashboard sans session → Redirect login
+
+## RÉSULTAT ATTENDU
+
+Une application d'authentification centralisée qui :
+- ✅ Gère le login unique pour toutes les apps FiltrePlante
+- ✅ Vérifie les permissions par app
+- ✅ Génère des tokens SSO sécurisés
+- ✅ Offre un dashboard "Mes Applications" intuitif
+- ✅ Respecte le Design System FiltrePlante
+- ✅ Permet une expérience SSO fluide (1 login = toutes les apps)
+
+Une fois déployée, les apps existantes (Stock, Prix) et futures devront ajouter :
+1. Endpoint `/sso/login?token=XXX` (validation token + création session)
+2. Redirect vers Auth si pas de session locale
+3. Même JWT_SECRET
+
+---
+
+**Disclaimer :** Ce brief est basé sur l'analyse du système d'authentification actuel (Prix-Referentiel, GestionStockFP) et la table referentiel.users. Si tu détectes une incohérence avec l'implémentation réelle (structure BDD, algo password, etc.), challenge-moi avec les preuves (code existant, schéma BDD). On itérera ensemble pour converger vers la meilleure solution.
+❓ QUESTIONS DE VALIDATION
+JWT_SECRET : As-tu le secret actuel des apps existantes à réutiliser ? Ou faut-il en générer un nouveau et le synchroniser sur toutes les apps ?
+AVAILABLE_APPS : Veux-tu que je liste toutes tes apps actuelles, ou juste Stock + Prix pour commencer ?
+Dashboard optionnel : Veux-tu le dashboard "Mes Applications" dès le début, ou juste le login avec redirect pour l'instant ?
+URL de l'app : Tu veux auth-filtreplante.replit.app ou un autre nom (ex: sso.filtreplante.repl.co) ?
+Admin panel : Faut-il ajouter une section admin pour gérer les users directement dans cette app, ou tu gardes ça dans Prix-Referentiel ?
+✅ CHECKLIST POST-CRÉATION
+ App Auth créée et déployée sur Replit
+ Login/password fonctionne avec user de test
+ Cookie auth_session créé après login
+ Dashboard affiche les apps autorisées
+ Endpoint /api/sso/generate?app=stock génère token valide
+ Test complet : Stock → Auth → Login → Retour Stock automatique
+ Design FiltrePlante appliqué (couleurs, typo)
+ Documentation des endpoints dans README
