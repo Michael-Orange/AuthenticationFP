@@ -1,0 +1,80 @@
+# AJOUT DE L'APP MAINTENANCE AU SYSTÈME SSO
+
+## 🎯 CONTEXTE
+
+L'app **Maintenance** a besoin d'une authentification SSO uniquement pour son interface admin (`/admin`). L'interface terrain reste en accès totalement libre.
+
+**Besoins :**
+- Créer une permission `peut_admin_maintenance` dans la table users
+- Activer cette permission pour certains utilisateurs
+- (Optionnel) Ajouter l'app au portail Auth pour affichage dans le dashboard
+
+## 🔧 TÂCHES À RÉALISER
+
+### 1. AJOUT DE LA COLONNE DE PERMISSION
+
+Ajouter la colonne `peut_admin_maintenance` dans la table `referentiel.users` :
+
+```sql
+ALTER TABLE referentiel.users 
+ADD COLUMN peut_admin_maintenance BOOLEAN DEFAULT false;
+```
+
+**Vérification :** La colonne doit être créée sans erreur et visible dans le schéma de la table.
+
+### 2. ACTIVATION DES PERMISSIONS
+
+Donner les permissions admin Maintenance aux utilisateurs suivants :
+- **michael** (CEO - accès complet)
+- **[MICHAEL : ajoute ici les autres usernames qui doivent avoir accès admin]**
+
+```sql
+UPDATE referentiel.users 
+SET peut_admin_maintenance = true 
+WHERE username IN ('michael');
+```
+
+**Note pour Michael :** Ajoute les usernames des autres admins à la liste ci-dessus avant d'exécuter.
+
+### 3. AJOUT DE L'APP AU PORTAIL (OPTIONNEL)
+
+**Question pour Michael :** Veux-tu que l'app Maintenance apparaisse dans le dashboard du portail Auth ?
+
+Si **OUI**, ajouter dans le fichier qui contient `DEFAULT_APPS` :
+
+```javascript
+{
+  id: 'maintenance',
+  nom: 'Maintenance (Admin)',
+  url: 'https://maintenance-fp.replit.app/admin',
+  icon: '🔧',
+  permission_field: 'peut_admin_maintenance',
+  description: 'Gestion des interventions de maintenance'
+}
+```
+
+Si **NON**, ignorer cette étape. L'app sera accessible directement via son URL mais ne sera pas listée dans le portail.
+
+### 4. VÉRIFICATION
+
+Tester que :
+- [ ] La colonne `peut_admin_maintenance` existe dans `referentiel.users`
+- [ ] Les utilisateurs spécifiés ont `peut_admin_maintenance = true`
+- [ ] (Si ajouté) L'app apparaît dans le dashboard pour les utilisateurs autorisés
+
+## ⚠️ POINTS D'ATTENTION
+
+- **Pas de migration de données** : on ajoute juste une colonne, pas de changement sur les données existantes
+- **Par défaut FALSE** : tous les users ont `peut_admin_maintenance = false` sauf activation manuelle
+- **URL de l'app** : l'URL exacte de l'app Maintenance sera fournie par Michael (placeholder : `https://maintenance-fp.replit.app`)
+
+## 📝 INFORMATIONS COMPLÉMENTAIRES
+
+**Variables d'environnement partagées :**
+- `DATABASE_URL` : BDD Neon (déjà configurée)
+- `JWT_SECRET` : Secret JWT partagé (déjà configuré)
+
+**Schéma SSO :**
+- L'app Maintenance utilisera le flow SSO standard
+- Endpoint de callback : `/sso/login`
+- Type de token : `type: 'sso'` dans le JWT
