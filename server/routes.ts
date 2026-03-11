@@ -135,6 +135,16 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
+  app.get("/api/auth/logout", (_req, res) => {
+    const returnUrl = (typeof _req.query.returnUrl === "string" && _req.query.returnUrl) || null;
+    res.clearCookie("auth_session");
+    if (returnUrl) {
+      res.redirect(returnUrl);
+    } else {
+      res.redirect("/login");
+    }
+  });
+
   app.get("/api/sso/generate", (req, res) => {
     const { app: appId } = req.query;
 
