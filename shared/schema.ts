@@ -33,6 +33,7 @@ export interface AppInfo {
   url: string;
   icon: string;
   description?: string;
+  directLink?: boolean;
 }
 
 export interface AuthUser {

@@ -9,7 +9,14 @@ import { getUserApps, type AuthUser, type AppInfo } from "@shared/schema";
 const DEFAULT_APPS: AppInfo[] = [
   { id: "stock", name: "Gestion Stock", url: "https://stock.filtreplante.com", icon: "📦", description: "Gestion des stocks et inventaire" },
   { id: "prix", name: "Prix Référentiel", url: "https://produit.filtreplante.com", icon: "💰", description: "Référentiel des prix produits" },
+  { id: "factures", name: "Factures", url: "https://factures-fp.replit.app", icon: "🧾", description: "Consultation des factures", directLink: true },
 ];
+
+const FACTURES_USER_LINKS: Record<string, string> = {
+  michael: "https://factures-fp.replit.app/michael_66a",
+  marine: "https://factures-fp.replit.app/marine_7cf",
+  fatou: "https://factures-fp.replit.app/fatou_7f4",
+};
 
 function getAvailableApps(): AppInfo[] {
   try {
@@ -233,7 +240,23 @@ export async function registerRoutes(
         ? allApps
         : allApps.filter((app) => user.apps.includes(app.id));
 
-      res.json(userApps);
+      const personalizedApps = userApps.map((app) => {
+        if (app.id === "factures" && FACTURES_USER_LINKS[user.username]) {
+          return { ...app, url: FACTURES_USER_LINKS[user.username] };
+        }
+        return app;
+      });
+
+      const facturesLink = FACTURES_USER_LINKS[user.username];
+      const hasFactures = personalizedApps.some((a) => a.id === "factures");
+      if (!hasFactures && facturesLink) {
+        const facturesApp = allApps.find((a) => a.id === "factures");
+        if (facturesApp) {
+          personalizedApps.push({ ...facturesApp, url: facturesLink });
+        }
+      }
+
+      res.json(personalizedApps);
     } catch {
       res.status(401).json({ error: "Session invalide" });
     }

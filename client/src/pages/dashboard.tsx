@@ -11,6 +11,7 @@ import {
   Leaf,
   LogOut,
   ArrowRight,
+  ExternalLink,
   Loader2,
   ShieldCheck,
   LayoutGrid,
@@ -22,7 +23,7 @@ function AppCard({ app, index, onAccess }: { app: AppInfo; index: number; onAcce
   const [loading, setLoading] = useState(false);
 
   const handleClick = () => {
-    setLoading(true);
+    if (!app.directLink) setLoading(true);
     onAccess(app);
   };
 
@@ -59,6 +60,11 @@ function AppCard({ app, index, onAccess }: { app: AppInfo; index: number; onAcce
             <>
               <Loader2 className="w-4 h-4 animate-spin mr-2" />
               Redirection...
+            </>
+          ) : app.directLink ? (
+            <>
+              Ouvrir
+              <ExternalLink className="w-4 h-4 ml-2 group-hover:translate-x-0.5 transition-transform" />
             </>
           ) : (
             <>
@@ -113,6 +119,10 @@ export default function DashboardPage() {
 
   const handleAppAccess = async (app: AppInfo) => {
     setAccessError(null);
+    if (app.directLink) {
+      window.open(app.url, "_blank");
+      return;
+    }
     try {
       const { token, redirectUrl } = await generateSsoToken(app.id);
       window.location.href = `${redirectUrl}?token=${token}`;
