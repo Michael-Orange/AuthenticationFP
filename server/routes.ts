@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import jwt from "jsonwebtoken";
 import CryptoJS from "crypto-js";
 import cookieParser from "cookie-parser";
-import type { AuthUser, AppInfo } from "@shared/schema";
+import { getUserApps, type AuthUser, type AppInfo } from "@shared/schema";
 
 const DEFAULT_APPS: AppInfo[] = [
   { id: "stock", name: "Gestion Stock", url: "https://stock.replit.app", icon: "📦", description: "Gestion des stocks et inventaire" },
@@ -52,19 +52,21 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Identifiants invalides" });
       }
 
-      const isPasswordValid = verifyPassword(password, user.password_hash);
+      const isPasswordValid = verifyPassword(password, user.password_encrypted);
       if (!isPasswordValid) {
         return res.status(401).json({ error: "Identifiants invalides" });
       }
 
       await storage.updateLastLogin(user.id);
 
+      const apps = getUserApps(user);
+
       const sessionPayload: AuthUser = {
         id: user.id,
         username: user.username,
         nom: user.nom,
         role: user.role,
-        apps: user.apps,
+        apps,
       };
 
       const sessionToken = jwt.sign({ ...sessionPayload, type: "session" }, getJwtSecret(), {
@@ -145,7 +147,7 @@ export async function registerRoutes(
         apps: decoded.apps,
       };
 
-      const hasAccess = user.role === "admin" || (user.apps && user.apps.includes(appId));
+      const hasAccess = user.role === "admin" || user.apps.includes(appId);
       if (!hasAccess) {
         return res.status(403).json({
           error: `Vous n'avez pas accès à cette application. Contactez l'administrateur.`,
@@ -205,7 +207,7 @@ export async function registerRoutes(
       const allApps = getAvailableApps();
       const userApps = user.role === "admin"
         ? allApps
-        : allApps.filter((app) => user.apps && user.apps.includes(app.id));
+        : allApps.filter((app) => user.apps.includes(app.id));
 
       res.json(userApps);
     } catch {

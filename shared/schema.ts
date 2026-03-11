@@ -1,5 +1,4 @@
-import { pgTable, pgSchema, text, serial, timestamp } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
+import { pgTable, pgSchema, text, serial, timestamp, boolean } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
 export const referentiel = pgSchema("referentiel");
@@ -7,12 +6,16 @@ export const referentiel = pgSchema("referentiel");
 export const users = referentiel.table("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
-  nom: text("nom"),
-  password_hash: text("password_hash").notNull(),
+  nom: text("nom").notNull(),
+  email: text("email"),
+  password_encrypted: text("password_encrypted").notNull(),
+  peut_acces_stock: boolean("peut_acces_stock").notNull().default(false),
+  peut_acces_prix: boolean("peut_acces_prix").notNull().default(false),
   role: text("role").notNull().default("user"),
-  apps: text("apps").array().default([]),
-  last_login: timestamp("last_login"),
-  created_at: timestamp("created_at").defaultNow(),
+  actif: boolean("actif").notNull().default(true),
+  date_creation: timestamp("date_creation").notNull().defaultNow(),
+  derniere_connexion: timestamp("derniere_connexion"),
+  created_by: text("created_by"),
   updated_at: timestamp("updated_at").defaultNow(),
 });
 
@@ -35,7 +38,14 @@ export interface AppInfo {
 export interface AuthUser {
   id: number;
   username: string;
-  nom: string | null;
+  nom: string;
   role: string;
-  apps: string[] | null;
+  apps: string[];
+}
+
+export function getUserApps(user: User): string[] {
+  const apps: string[] = [];
+  if (user.peut_acces_stock) apps.push("stock");
+  if (user.peut_acces_prix) apps.push("prix");
+  return apps;
 }
