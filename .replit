@@ -42,3 +42,4 @@ waitForPort = 5000
 
 [userenv.shared]
 DATABASE_URL = "postgresql://neondb_owner:npg_RtU4PSaFfrY9@ep-flat-wave-ai8s9lqh-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require"
+CRYPTO_SECRET = "71e9864363a06e76b130eec8d872fd17f6fbd40ba04840b0702ea0979d8064ba"

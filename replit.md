@@ -7,7 +7,7 @@ Centralized SSO authentication portal for all FiltrePlante internal applications
 - **Frontend:** React + TypeScript + Vite + Tailwind CSS
 - **Backend:** Node.js + Express
 - **Database:** PostgreSQL (Neon) - uses existing `referentiel.users` table
-- **Auth:** JWT (jsonwebtoken) for sessions, CryptoJS SHA256 for password hashing (compatibility with existing apps)
+- **Auth:** JWT (jsonwebtoken) for sessions, CryptoJS AES for password verification (compatibility with existing apps)
 
 ## Key Files
 - `shared/schema.ts` - Database schema (referentiel.users) and shared types
@@ -30,12 +30,14 @@ Centralized SSO authentication portal for all FiltrePlante internal applications
 2. User logs in (or auto-redirects if session exists)
 3. Auth generates SSO token and redirects to target app's `/sso/login?token=XXX`
 
-## Environment Variables
-- `DATABASE_URL` - PostgreSQL connection string
-- `JWT_SECRET` - Shared JWT secret (must be same across all FiltrePlante apps)
-- `AVAILABLE_APPS` - JSON array of app configurations (optional, has defaults)
+## Database Schema (referentiel.users on Neon)
+- `password_encrypted` - CryptoJS AES encrypted passwords (not hashed)
+- `peut_acces_stock` / `peut_acces_prix` - Boolean permission flags (not apps array)
+- `actif` - Boolean to enable/disable users
+- `derniere_connexion` - Last login timestamp
 
-## Test Users (seeded)
-- `michael` / `admin123` - Admin, access to all apps
-- `cheikh` / `user123` - User, access to stock only
-- `fatou` / `user123` - User, access to stock + prix
+## Environment Variables
+- `DATABASE_URL` - Neon PostgreSQL connection string (shared with all apps)
+- `JWT_SECRET` - Shared JWT secret (must be same across all FiltrePlante apps)
+- `CRYPTO_SECRET` - AES encryption key for password verification
+- `AVAILABLE_APPS` - JSON array of app configurations (optional, has defaults)

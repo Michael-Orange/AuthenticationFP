@@ -21,9 +21,15 @@ function getAvailableApps(): AppInfo[] {
   return DEFAULT_APPS;
 }
 
-function verifyPassword(plainPassword: string, hash: string): boolean {
-  const computedHash = CryptoJS.SHA256(plainPassword).toString();
-  return computedHash === hash;
+function verifyPassword(plainPassword: string, encryptedPassword: string): boolean {
+  try {
+    const cryptoSecret = process.env.CRYPTO_SECRET;
+    if (!cryptoSecret) throw new Error("CRYPTO_SECRET not configured");
+    const decrypted = CryptoJS.AES.decrypt(encryptedPassword, cryptoSecret).toString(CryptoJS.enc.Utf8);
+    return decrypted === plainPassword;
+  } catch {
+    return false;
+  }
 }
 
 function getJwtSecret(): string {
