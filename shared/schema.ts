@@ -11,6 +11,7 @@ export const users = referentiel.table("users", {
   password_encrypted: text("password_encrypted").notNull(),
   peut_acces_stock: boolean("peut_acces_stock").notNull().default(false),
   peut_acces_prix: boolean("peut_acces_prix").notNull().default(false),
+  peut_admin_maintenance: boolean("peut_admin_maintenance").default(false),
   role: text("role").notNull().default("user"),
   actif: boolean("actif").notNull().default(true),
   date_creation: timestamp("date_creation").notNull().defaultNow(),
@@ -48,5 +49,6 @@ export function getUserApps(user: User): string[] {
   const apps: string[] = [];
   if (user.peut_acces_stock) apps.push("stock");
   if (user.peut_acces_prix) apps.push("prix");
+  if (user.peut_admin_maintenance) apps.push("maintenance-admin");
   return apps;
 }

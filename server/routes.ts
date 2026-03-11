@@ -10,6 +10,8 @@ const DEFAULT_APPS: AppInfo[] = [
   { id: "stock", name: "Gestion Stock", url: "https://stock.filtreplante.com", icon: "📦", description: "Gestion des stocks et inventaire" },
   { id: "prix", name: "Prix Référentiel", url: "https://produit.filtreplante.com", icon: "💰", description: "Référentiel des prix produits" },
   { id: "factures", name: "Factures", url: "https://factures-fp.replit.app", icon: "🧾", description: "Consultation des factures", directLink: true },
+  { id: "maintenance", name: "Maintenance", url: "https://maintenance.filtreplante.com", icon: "🔧", description: "Suivi des interventions terrain", directLink: true },
+  { id: "maintenance-admin", name: "Maintenance Admin", url: "https://maintenance.filtreplante.com/admin", icon: "⚙️", description: "Gestion des interventions de maintenance" },
 ];
 
 const FACTURES_USER_LINKS: Record<string, string> = {
@@ -236,9 +238,14 @@ export async function registerRoutes(
       };
 
       const allApps = getAvailableApps();
+
+      const APPS_FOR_ALL = ["maintenance"];
+
       const userApps = user.role === "admin"
         ? allApps
-        : allApps.filter((app) => user.apps.includes(app.id));
+        : allApps.filter((app) =>
+            user.apps.includes(app.id) || APPS_FOR_ALL.includes(app.id)
+          );
 
       const personalizedApps = userApps.map((app) => {
         if (app.id === "factures" && FACTURES_USER_LINKS[user.username]) {
