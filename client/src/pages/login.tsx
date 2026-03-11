@@ -1,19 +1,32 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { loginSchema, type LoginInput } from "@shared/schema";
+import { useQuery } from "@tanstack/react-query";
+import { getQueryFn } from "@/lib/queryClient";
 import { login, generateSsoToken } from "@/lib/auth";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Loader2, Eye, EyeOff, Lock, User, Leaf } from "lucide-react";
 import { motion } from "framer-motion";
+
+interface UserOption {
+  username: string;
+  nom: string;
+}
 
 export default function LoginPage() {
   const [, navigate] = useLocation();
   const { user, isLoading: authLoading } = useAuth();
+  const [selectedUsername, setSelectedUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -22,9 +35,9 @@ export default function LoginPage() {
   const params = new URLSearchParams(window.location.search);
   const redirectApp = params.get("redirect");
 
-  const form = useForm<LoginInput>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { username: "", password: "" },
+  const { data: usersList, isLoading: usersLoading } = useQuery<UserOption[]>({
+    queryKey: ["/api/auth/users"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
   useEffect(() => {
@@ -45,12 +58,23 @@ export default function LoginPage() {
     }
   }, [user, authLoading, redirectApp, navigate]);
 
-  const onSubmit = async (data: LoginInput) => {
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError(null);
+
+    if (!selectedUsername) {
+      setError("Veuillez sélectionner un utilisateur");
+      return;
+    }
+    if (!password) {
+      setError("Veuillez entrer votre mot de passe");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      await login(data.username, data.password);
+      await login(selectedUsername, password);
 
       if (redirectApp) {
         setIsRedirecting(true);
@@ -137,26 +161,40 @@ export default function LoginPage() {
               </motion.div>
             )}
 
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+            <form onSubmit={onSubmit} className="space-y-5">
               <div className="space-y-2">
                 <Label htmlFor="username" className="text-sm font-medium text-foreground">
-                  Nom d'utilisateur
+                  Utilisateur
                 </Label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="username"
-                    data-testid="input-username"
-                    placeholder="Votre identifiant"
-                    autoFocus
-                    autoComplete="username"
-                    className="pl-10 h-11 bg-background"
-                    {...form.register("username")}
-                  />
+                  <Select
+                    value={selectedUsername}
+                    onValueChange={(value) => {
+                      setSelectedUsername(value);
+                      setError(null);
+                    }}
+                  >
+                    <SelectTrigger
+                      id="username"
+                      data-testid="select-username"
+                      className="h-11 pl-10 bg-background"
+                    >
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                      <SelectValue placeholder={usersLoading ? "Chargement..." : "Sélectionnez votre nom"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {usersList?.map((u) => (
+                        <SelectItem
+                          key={u.username}
+                          value={u.username}
+                          data-testid={`option-user-${u.username}`}
+                        >
+                          {u.nom}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                {form.formState.errors.username && (
-                  <p className="text-xs text-destructive">{form.formState.errors.username.message}</p>
-                )}
               </div>
 
               <div className="space-y-2">
@@ -172,7 +210,11 @@ export default function LoginPage() {
                     placeholder="••••••••"
                     autoComplete="current-password"
                     className="pl-10 pr-10 h-11 bg-background"
-                    {...form.register("password")}
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setError(null);
+                    }}
                   />
                   <button
                     type="button"
@@ -184,9 +226,6 @@ export default function LoginPage() {
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                {form.formState.errors.password && (
-                  <p className="text-xs text-destructive">{form.formState.errors.password.message}</p>
-                )}
               </div>
 
               {error && (
@@ -202,7 +241,7 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 data-testid="button-login"
-                disabled={isSubmitting}
+                disabled={isSubmitting || usersLoading}
                 className="w-full h-11 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold shadow-md shadow-emerald-200 transition-all duration-200"
               >
                 {isSubmitting ? (

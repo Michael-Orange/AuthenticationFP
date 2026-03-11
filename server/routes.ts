@@ -44,6 +44,16 @@ export async function registerRoutes(
 ): Promise<Server> {
   app.use(cookieParser());
 
+  app.get("/api/auth/users", async (_req, res) => {
+    try {
+      const activeUsers = await storage.getActiveUsers();
+      res.json(activeUsers);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ error: "Erreur serveur" });
+    }
+  });
+
   app.post("/api/auth/login", async (req, res) => {
     const { username, password } = req.body;
 
