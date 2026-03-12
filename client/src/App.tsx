@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 
 const LoginPage = lazy(() => import("@/pages/login"));
 const DashboardPage = lazy(() => import("@/pages/dashboard"));
+const AdminUsersPage = lazy(() => import("@/pages/admin-users"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 
 function Loading() {
@@ -27,6 +28,7 @@ function Router() {
         </Route>
         <Route path="/login" component={LoginPage} />
         <Route path="/dashboard" component={DashboardPage} />
+        <Route path="/admin/users" component={AdminUsersPage} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>

@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   LayoutGrid,
   AlertCircle,
+  Users,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -158,6 +159,18 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-4">
+            {user.role === "admin" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                data-testid="button-admin-users"
+                onClick={() => navigate("/admin/users")}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <Users className="w-4 h-4 mr-1.5" />
+                <span className="hidden sm:inline">Utilisateurs</span>
+              </Button>
+            )}
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-100">
               <div className="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-xs font-bold">
                 {(user.nom || user.username).charAt(0).toUpperCase()}

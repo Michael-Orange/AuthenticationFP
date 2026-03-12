@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import jwt from "jsonwebtoken";
@@ -40,10 +40,60 @@ function verifyPassword(plainPassword: string, encryptedPassword: string): boole
   }
 }
 
+function encryptPassword(plainPassword: string): string {
+  const cryptoSecret = process.env.CRYPTO_SECRET;
+  if (!cryptoSecret) throw new Error("CRYPTO_SECRET not configured");
+  return CryptoJS.AES.encrypt(plainPassword, cryptoSecret).toString();
+}
+
+function generateRandomPassword(length = 12): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%&*";
+  let password = "";
+  for (let i = 0; i < length; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return password;
+}
+
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET not configured");
   return secret;
+}
+
+function extractSessionUser(req: Request): AuthUser | null {
+  const sessionToken = req.cookies.auth_session;
+  if (!sessionToken) return null;
+  try {
+    const decoded = jwt.verify(sessionToken, getJwtSecret()) as any;
+    if (decoded.type !== "session") return null;
+    return {
+      id: decoded.id,
+      username: decoded.username,
+      nom: decoded.nom,
+      role: decoded.role,
+      apps: decoded.apps,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const user = extractSessionUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "Non authentifié" });
+  }
+  (req as any).user = user;
+  next();
+}
+
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  const user = (req as any).user as AuthUser;
+  if (user.role !== "admin") {
+    return res.status(403).json({ error: "Accès refusé : droits administrateur requis" });
+  }
+  next();
 }
 
 export async function registerRoutes(
@@ -267,6 +317,150 @@ export async function registerRoutes(
       res.json(personalizedApps);
     } catch {
       res.status(401).json({ error: "Session invalide" });
+    }
+  });
+
+  // ==================== ADMIN ROUTES ====================
+
+  app.get("/api/admin/users", requireAuth, requireAdmin, async (_req, res) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      const sanitized = allUsers.map(({ password_encrypted, ...rest }) => rest);
+      res.json(sanitized);
+    } catch (error) {
+      console.error("Error fetching all users:", error);
+      res.status(500).json({ error: "Erreur serveur" });
+    }
+  });
+
+  app.post("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
+    const { username, nom, email, password, role, actif, permissions } = req.body;
+
+    if (!username || !nom || !password) {
+      return res.status(400).json({ error: "Username, nom et mot de passe requis" });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ error: "Le mot de passe doit contenir au moins 8 caractères" });
+    }
+
+    try {
+      const existing = await storage.getUserByUsername(username);
+      if (existing) {
+        return res.status(409).json({ error: "Ce username existe déjà" });
+      }
+
+      const adminUser = (req as any).user as AuthUser;
+      const encrypted = encryptPassword(password);
+
+      const newUser = await storage.createUser({
+        username: username.toLowerCase().trim(),
+        nom,
+        email: email || null,
+        password_encrypted: encrypted,
+        role: role || "user",
+        actif: actif !== false,
+        peut_acces_stock: permissions?.peut_acces_stock || false,
+        peut_acces_prix: permissions?.peut_acces_prix || false,
+        peut_acces_construction: permissions?.peut_acces_construction || false,
+        peut_admin_maintenance: permissions?.peut_admin_maintenance || false,
+        created_by: adminUser.username,
+      });
+
+      const { password_encrypted, ...sanitized } = newUser;
+      res.json({ success: true, user: sanitized, temporaryPassword: password });
+    } catch (error: any) {
+      if (error.code === "23505") {
+        return res.status(409).json({ error: "Username ou email déjà utilisé" });
+      }
+      console.error("Error creating user:", error);
+      res.status(500).json({ error: "Erreur serveur" });
+    }
+  });
+
+  app.patch("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res) => {
+    const userId = parseInt(req.params.id);
+    const adminUser = (req as any).user as AuthUser;
+    const { nom, email, role, actif, permissions } = req.body;
+
+    if (adminUser.id === userId) {
+      if (role && role !== "admin") {
+        return res.status(400).json({ error: "Vous ne pouvez pas vous retirer le rôle admin" });
+      }
+      if (actif === false) {
+        return res.status(400).json({ error: "Vous ne pouvez pas désactiver votre propre compte" });
+      }
+    }
+
+    try {
+      const updateData: any = {};
+      if (nom !== undefined) updateData.nom = nom;
+      if (email !== undefined) updateData.email = email || null;
+      if (role !== undefined) updateData.role = role;
+      if (actif !== undefined) updateData.actif = actif;
+      if (permissions) {
+        if (permissions.peut_acces_stock !== undefined) updateData.peut_acces_stock = permissions.peut_acces_stock;
+        if (permissions.peut_acces_prix !== undefined) updateData.peut_acces_prix = permissions.peut_acces_prix;
+        if (permissions.peut_acces_construction !== undefined) updateData.peut_acces_construction = permissions.peut_acces_construction;
+        if (permissions.peut_admin_maintenance !== undefined) updateData.peut_admin_maintenance = permissions.peut_admin_maintenance;
+      }
+
+      const updated = await storage.updateUser(userId, updateData);
+      if (!updated) {
+        return res.status(404).json({ error: "Utilisateur non trouvé" });
+      }
+
+      const { password_encrypted, ...sanitized } = updated;
+      res.json({ success: true, user: sanitized });
+    } catch (error: any) {
+      if (error.code === "23505") {
+        return res.status(409).json({ error: "Email déjà utilisé par un autre utilisateur" });
+      }
+      console.error("Error updating user:", error);
+      res.status(500).json({ error: "Erreur serveur" });
+    }
+  });
+
+  app.post("/api/admin/users/:id/reset-password", requireAuth, requireAdmin, async (req, res) => {
+    const userId = parseInt(req.params.id);
+
+    try {
+      const user = await storage.getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ error: "Utilisateur non trouvé" });
+      }
+
+      const newPassword = generateRandomPassword();
+      const encrypted = encryptPassword(newPassword);
+
+      await storage.updateUser(userId, { password_encrypted: encrypted });
+
+      res.json({ success: true, temporaryPassword: newPassword });
+    } catch (error) {
+      console.error("Error resetting password:", error);
+      res.status(500).json({ error: "Erreur serveur" });
+    }
+  });
+
+  app.delete("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res) => {
+    const userId = parseInt(req.params.id);
+    const adminUser = (req as any).user as AuthUser;
+
+    if (adminUser.id === userId) {
+      return res.status(400).json({ error: "Vous ne pouvez pas supprimer votre propre compte" });
+    }
+
+    try {
+      const user = await storage.getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ error: "Utilisateur non trouvé" });
+      }
+
+      await storage.deleteUser(userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      res.status(500).json({ error: "Erreur serveur" });
     }
   });
 
