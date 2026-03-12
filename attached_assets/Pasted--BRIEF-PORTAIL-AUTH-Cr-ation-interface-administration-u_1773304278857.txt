@@ -1,0 +1,399 @@
+# BRIEF PORTAIL AUTH - Création interface administration utilisateurs
+
+## 🎯 OBJECTIF
+
+Créer une interface complète de gestion des utilisateurs dans le portail Auth pour centraliser l'administration. Cette interface remplacera celle actuellement présente dans l'app "Référentiel Produits Fournisseurs".
+
+## 📊 CONTEXTE
+
+**Table existante** : `referentiel.users` (base Neon partagée)
+
+**Colonnes** :
+- id (serial PRIMARY KEY)
+- username (text, NOT NULL, UNIQUE)
+- nom (text, NOT NULL)
+- email (text, UNIQUE, nullable)
+- password_encrypted (text, NOT NULL) — Chiffré AES réversible
+- peut_acces_stock (boolean, default false)
+- peut_acces_prix (boolean, default false)
+- peut_acces_construction (boolean, default false)
+- peut_admin_maintenance (boolean, default false)
+- role (text, default "user") — Valeurs : "admin", "user"
+- actif (boolean, default true)
+- date_creation (timestamp, default now())
+- derniere_connexion (timestamp, nullable)
+- created_by (text, nullable)
+- updated_at (timestamp, default now())
+
+**Utilisateurs actuels** :
+- michael (admin, accès tout)
+- marine (admin, accès tout)
+- cheikh (user, stock uniquement)
+- fatou (user, stock + prix)
+
+**Chiffrement des mots de passe** :
+L'app Produits utilise un chiffrement AES réversible (pas bcrypt). Il faut soit :
+- **Option A** : Réutiliser le même système de chiffrement (copier `password-crypto.ts` depuis l'app Produits)
+- **Option B** : Migrer vers bcrypt (nécessite réinitialisation de tous les mots de passe)
+
+**Recommandation** : Option A pour l'instant (compatibilité immédiate), Option B en phase 2.
+
+## 🔧 SPÉCIFICATIONS FONCTIONNELLES
+
+### 1. Protection de la route admin
+
+**Route** : `/admin/users`
+
+**Accès restreint** :
+- Uniquement utilisateurs avec `role = 'admin'`
+- Actuellement : Michael et Marine
+- Middleware : Vérifier `req.user.role === 'admin'`
+
+**Si non-admin** : Rediriger vers le dashboard avec message "Accès refusé"
+
+### 2. Page de liste des utilisateurs
+
+**URL** : `/admin/users`
+
+**Affichage** :
+- Tableau avec colonnes : Username, Nom, Email, Role, Statut (Actif/Inactif), Apps autorisées, Dernière connexion, Actions
+- Badges pour les apps : 
+  - "Stock" (si peut_acces_stock = true)
+  - "Prix" (si peut_acces_prix = true)
+  - "Construction" (si peut_acces_construction = true)
+  - "Maintenance Admin" (si peut_admin_maintenance = true)
+- Badge "Actif" (vert) ou "Inactif" (gris) selon la colonne `actif`
+- Badge "Admin" (bleu) ou "User" (gris) selon `role`
+
+**Fonctionnalités** :
+- Recherche par username ou nom
+- Filtre par rôle (Admin / User)
+- Filtre par statut (Actif / Inactif)
+- Tri par colonne
+- Bouton "Nouvel utilisateur" (ouvre modal de création)
+
+**Actions par ligne** :
+- Bouton "Modifier" (ouvre modal d'édition)
+- Bouton "Réinitialiser mot de passe" (génère nouveau mot de passe temporaire)
+- Toggle "Actif/Inactif" (activation/désactivation du compte)
+- Bouton "Supprimer" (avec confirmation, sauf si c'est soi-même)
+
+### 3. Modal de création d'utilisateur
+
+**Champs du formulaire** :
+- Username (text, required, unique)
+- Nom complet (text, required)
+- Email (email, optional)
+- Mot de passe (text, required, min 8 caractères)
+- Confirmation mot de passe (text, required, doit matcher)
+- Rôle (select : "Admin" ou "User", default "User")
+- Statut (checkbox "Compte actif", default true)
+
+**Permissions par app** (checkboxes) :
+- ☐ Accès Stock
+- ☐ Accès Prix
+- ☐ Accès Construction
+- ☐ Administration Maintenance
+
+**Validation** :
+- Username unique en base
+- Email unique si fourni
+- Mot de passe >= 8 caractères
+- Confirmation mot de passe identique
+
+**Au submit** :
+- Chiffrer le mot de passe avec AES (même système que l'app Produits)
+- Insérer dans `referentiel.users`
+- Remplir `created_by` avec le username de l'admin connecté
+- Remplir `date_creation` et `updated_at` automatiquement
+- Afficher le mot de passe temporaire à l'admin (à communiquer à l'utilisateur)
+- Fermer le modal et rafraîchir la liste
+
+### 4. Modal d'édition d'utilisateur
+
+**Champs modifiables** :
+- Nom complet
+- Email
+- Rôle (Admin / User)
+- Statut (Actif / Inactif)
+- Permissions par app (checkboxes identiques à la création)
+
+**Champs NON modifiables** :
+- Username (affiché en lecture seule)
+- Mot de passe (bouton séparé "Réinitialiser mot de passe")
+- Date de création
+- Dernière connexion
+
+**Protection** :
+- Un admin ne peut pas se retirer le rôle admin lui-même
+- Un admin ne peut pas se désactiver lui-même
+
+**Au submit** :
+- Mettre à jour les champs modifiés
+- Remplir `updated_at` avec timestamp actuel
+- Fermer le modal et rafraîchir la liste
+
+### 5. Réinitialisation de mot de passe
+
+**Action** : Clic sur "Réinitialiser mot de passe"
+
+**Comportement** :
+- Générer un nouveau mot de passe aléatoire (12 caractères, alphanumérique + symboles)
+- Chiffrer avec AES
+- Mettre à jour `password_encrypted` en base
+- Afficher le nouveau mot de passe dans une modal (copie possible)
+- Message : "Mot de passe réinitialisé. Communiquez ce mot de passe à l'utilisateur : [XXXXXXXX]. Il pourra le changer après sa première connexion."
+
+### 6. Suppression d'utilisateur
+
+**Action** : Clic sur "Supprimer"
+
+**Protection** :
+- Ne peut pas se supprimer soi-même
+- Confirmation obligatoire : "Êtes-vous sûr de vouloir supprimer l'utilisateur [username] ? Cette action est irréversible."
+
+**Comportement** :
+- Supprimer la ligne de `referentiel.users`
+- Invalider toutes les sessions actives de cet utilisateur (si système de sessions géré)
+- Rafraîchir la liste
+
+### 7. Toggle Actif/Inactif
+
+**Action** : Clic sur le toggle à côté du statut
+
+**Comportement** :
+- Inverser la valeur de `actif` en base
+- Si passage à `false` : l'utilisateur ne peut plus se connecter (vérification dans le flow SSO)
+- Si passage à `true` : l'utilisateur peut à nouveau se connecter
+- Message de confirmation : "Le compte [username] a été [activé/désactivé]"
+
+**Protection** :
+- Un admin ne peut pas se désactiver lui-même
+
+## 🎨 INTERFACE UTILISATEUR
+
+**Style** : Respecter la charte graphique FiltrePlante (consulter https://github.com/Michael-Orange/Charte-Graphique-FP)
+
+**Layout** :
+```
+┌────────────────────────────────────────────────────────────┐
+│  Portail Auth FiltrePlante                    [Michael ▼]  │
+├────────────────────────────────────────────────────────────┤
+│  📊 Dashboard  |  👥 Gestion Utilisateurs (Admin)          │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│  GESTION DES UTILISATEURS                                  │
+│                                                            │
+│  🔍 [Rechercher...]  [Filtre: Tous ▼]  [+ Nouvel utilisateur]│
+│                                                            │
+│  ┌──────────────────────────────────────────────────────┐ │
+│  │ Username  │ Nom    │ Role  │ Apps    │ Statut │ ... │ │
+│  ├──────────────────────────────────────────────────────┤ │
+│  │ michael   │ Michael│ Admin │ 🏷️ All  │ ✅ Actif│ ⚙️  │ │
+│  │ marine    │ Marine │ Admin │ 🏷️ All  │ ✅ Actif│ ⚙️  │ │
+│  │ fatou     │ Fatou  │ User  │ 🏷️🏷️    │ ✅ Actif│ ⚙️  │ │
+│  │ cheikh    │ Cheikh │ User  │ 🏷️      │ ✅ Actif│ ⚙️  │ │
+│  └──────────────────────────────────────────────────────┘ │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
+```
+
+**Badges apps** (design cohérent avec l'app Produits) :
+- Stock : Badge bleu avec icône 📦
+- Prix : Badge vert avec icône 💰
+- Construction : Badge orange avec icône 🏗️
+- Maintenance Admin : Badge rouge avec icône 🔧
+
+## 🔧 IMPLÉMENTATION TECHNIQUE
+
+### Backend - Routes API
+
+**Créer** : `server/routes/admin.ts`
+
+**Endpoints** :
+
+```typescript
+// Liste tous les utilisateurs (admin only)
+GET /api/admin/users
+→ Retourne : Array<User> (sans les mots de passe)
+
+// Créer un utilisateur (admin only)
+POST /api/admin/users
+→ Body : { username, nom, email?, password, role, actif, permissions }
+→ Retourne : { success: true, user: User, temporaryPassword: string }
+
+// Mettre à jour un utilisateur (admin only)
+PATCH /api/admin/users/:id
+→ Body : { nom?, email?, role?, actif?, permissions? }
+→ Retourne : { success: true, user: User }
+
+// Réinitialiser mot de passe (admin only)
+POST /api/admin/users/:id/reset-password
+→ Retourne : { success: true, temporaryPassword: string }
+
+// Supprimer un utilisateur (admin only)
+DELETE /api/admin/users/:id
+→ Retourne : { success: true }
+```
+
+**Middleware** : Appliquer `requireAuth` + vérification `role === 'admin'` sur toutes ces routes
+
+### Gestion des mots de passe
+
+**Système actuel** : AES réversible avec `CRYPTO_SECRET`
+
+**À copier depuis l'app Produits** : `server/utils/password-crypto.ts`
+
+**Fonctions nécessaires** :
+- `encryptPassword(plainPassword: string): string` — Chiffrement AES
+- `decryptPassword(encryptedPassword: string): string` — Déchiffrement AES (pour afficher le mot de passe temporaire)
+- `generateRandomPassword(length: number): string` — Génération mot de passe aléatoire
+
+**Variable d'environnement** : `CRYPTO_SECRET` (même valeur que l'app Produits)
+
+### Frontend - Composants
+
+**Créer** :
+- `client/src/pages/admin/users.tsx` — Page principale
+- `client/src/components/admin/UserCreateModal.tsx` — Modal création
+- `client/src/components/admin/UserEditModal.tsx` — Modal édition
+- `client/src/components/admin/PasswordResetModal.tsx` — Modal réinit password
+- `client/src/components/admin/UserTable.tsx` — Tableau utilisateurs
+- `client/src/components/admin/AppBadge.tsx` — Badge pour les apps
+
+**Hooks/API** :
+```typescript
+// Hook pour récupérer les utilisateurs
+const { data: users, isLoading, error, refetch } = useQuery({
+  queryKey: ['admin', 'users'],
+  queryFn: () => fetch('/api/admin/users').then(r => r.json())
+});
+
+// Mutation pour créer
+const createUser = useMutation({
+  mutationFn: (userData) => fetch('/api/admin/users', {
+    method: 'POST',
+    body: JSON.stringify(userData)
+  }).then(r => r.json()),
+  onSuccess: () => refetch()
+});
+
+// Mutation pour modifier
+const updateUser = useMutation({
+  mutationFn: ({ id, ...data }) => fetch(`/api/admin/users/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data)
+  }).then(r => r.json()),
+  onSuccess: () => refetch()
+});
+
+// Mutation pour réinitialiser mot de passe
+const resetPassword = useMutation({
+  mutationFn: (userId) => fetch(`/api/admin/users/${userId}/reset-password`, {
+    method: 'POST'
+  }).then(r => r.json())
+});
+
+// Mutation pour supprimer
+const deleteUser = useMutation({
+  mutationFn: (userId) => fetch(`/api/admin/users/${userId}`, {
+    method: 'DELETE'
+  }).then(r => r.json()),
+  onSuccess: () => refetch()
+});
+```
+
+### Navigation
+
+**Ajouter dans le menu du portail Auth** (si Michael ou Marine connecté) :
+- Lien "👥 Gestion Utilisateurs" dans la sidebar
+- Redirection vers `/admin/users`
+
+**Protection route frontend** :
+```typescript
+// Dans le router
+{
+  path: '/admin/users',
+  element: <RequireAdmin><UsersPage /></RequireAdmin>
+}
+
+// Composant RequireAdmin
+function RequireAdmin({ children }) {
+  const { user } = useAuth();
+  if (user.role !== 'admin') {
+    return <Navigate to="/dashboard" />;
+  }
+  return children;
+}
+```
+
+## ⚠️ POINTS D'ATTENTION
+
+1. **Chiffrement des mots de passe** :
+   - Utiliser le MÊME système que l'app Produits (AES avec CRYPTO_SECRET)
+   - Variable d'environnement `CRYPTO_SECRET` doit être identique entre Auth et Produits
+
+2. **Permissions apps existantes** :
+   - Vérifier toutes les colonnes `peut_acces_xxx` et `peut_admin_xxx` en base
+   - Ajouter un checkbox pour chaque permission dans le formulaire
+   - Ne pas oublier `peut_admin_maintenance` qui est un cas particulier
+
+3. **Protection contre les erreurs** :
+   - Un admin ne peut pas se retirer son propre rôle admin
+   - Un admin ne peut pas se désactiver lui-même
+   - Un admin ne peut pas se supprimer lui-même
+   - Vérifier l'unicité de username et email côté backend
+
+4. **Gestion des sessions** :
+   - Quand un utilisateur est désactivé (`actif = false`), vérifier dans le flow SSO
+   - Invalider les sessions existantes si suppression d'utilisateur
+
+5. **UX mot de passe temporaire** :
+   - Afficher clairement le mot de passe après création/réinitialisation
+   - Permettre de copier dans le presse-papier
+   - Avertir l'admin de le communiquer de manière sécurisée
+
+6. **Dernière connexion** :
+   - Mettre à jour `derniere_connexion` dans le flow SSO (déjà en place ?)
+   - Afficher au format lisible dans le tableau (ex: "Il y a 2 jours")
+
+## ✅ CHECKLIST POST-IMPLÉMENTATION
+
+**Backend** :
+- [ ] Routes API `/api/admin/users/*` créées
+- [ ] Middleware admin appliqué sur toutes les routes
+- [ ] Chiffrement AES fonctionnel (même système que Produits)
+- [ ] Génération de mots de passe aléatoires sécurisés
+- [ ] Protection contre auto-suppression/auto-désactivation
+- [ ] Vérification unicité username/email
+
+**Frontend** :
+- [ ] Page `/admin/users` accessible uniquement aux admins
+- [ ] Lien dans la navigation (sidebar ou menu)
+- [ ] Tableau avec toutes les colonnes demandées
+- [ ] Badges apps avec bonne couleur/icône
+- [ ] Modal création fonctionnelle
+- [ ] Modal édition fonctionnelle
+- [ ] Modal réinitialisation mot de passe avec copie
+- [ ] Confirmation suppression
+- [ ] Toggle actif/inactif
+- [ ] Recherche et filtres opérationnels
+
+**Tests** :
+- [ ] Michael peut créer un utilisateur → mot de passe affiché
+- [ ] Michael peut modifier les permissions d'un utilisateur
+- [ ] Michael peut réinitialiser un mot de passe
+- [ ] Michael ne peut pas se supprimer lui-même
+- [ ] Michael ne peut pas se retirer le rôle admin
+- [ ] Marine a les mêmes accès que Michael
+- [ ] Un utilisateur désactivé ne peut plus se connecter (test via flow SSO)
+- [ ] Un utilisateur avec `peut_acces_stock = false` ne voit pas l'app Stock dans le portail
+- [ ] Suppression d'un utilisateur invalide ses sessions
+
+**Configuration** :
+- [ ] Variable `CRYPTO_SECRET` configurée dans Replit Secrets (même valeur que Produits)
+- [ ] Documentation mise à jour (README ou docs/)
+
+---
+
+**DISCLAIMER** : Ce brief est basé sur ma compréhension de la structure actuelle de l'app Produits et du portail Auth. Si tu détectes une incohérence avec l'implémentation réelle (noms de champs différents, logique de chiffrement différente, etc.), challenge-moi avec les preuves. On itérera ensemble pour aligner parfaitement.
