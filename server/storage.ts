@@ -26,6 +26,7 @@ export interface IStorage {
     peut_acces_prix: boolean;
     peut_acces_construction: boolean;
     peut_admin_maintenance: boolean;
+    peut_acces_shelly: boolean;
     created_by?: string;
   }): Promise<User>;
   updateUser(id: number, data: Partial<{
@@ -37,6 +38,7 @@ export interface IStorage {
     peut_acces_prix: boolean;
     peut_acces_construction: boolean;
     peut_admin_maintenance: boolean;
+    peut_acces_shelly: boolean;
     password_encrypted: string;
   }>): Promise<User | undefined>;
   deleteUser(id: number): Promise<void>;
@@ -96,6 +98,7 @@ export class DatabaseStorage implements IStorage {
     peut_acces_prix: boolean;
     peut_acces_construction: boolean;
     peut_admin_maintenance: boolean;
+    peut_acces_shelly: boolean;
     created_by?: string;
   }): Promise<User> {
     const result = await db
@@ -111,6 +114,7 @@ export class DatabaseStorage implements IStorage {
         peut_acces_prix: data.peut_acces_prix,
         peut_acces_construction: data.peut_acces_construction,
         peut_admin_maintenance: data.peut_admin_maintenance,
+        peut_acces_shelly: data.peut_acces_shelly,
         created_by: data.created_by || null,
       })
       .returning();
@@ -126,6 +130,7 @@ export class DatabaseStorage implements IStorage {
     peut_acces_prix: boolean;
     peut_acces_construction: boolean;
     peut_admin_maintenance: boolean;
+    peut_acces_shelly: boolean;
     password_encrypted: string;
   }>): Promise<User | undefined> {
     const result = await db
