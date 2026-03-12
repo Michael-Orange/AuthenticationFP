@@ -12,7 +12,7 @@ const DEFAULT_APPS: AppInfo[] = [
   { id: "factures", name: "Factures", url: "https://factures-fp.replit.app", icon: "🧾", description: "Consultation des factures", directLink: true },
   { id: "maintenance", name: "Maintenance", url: "https://maintenance.filtreplante.com", icon: "🔧", description: "Suivi des interventions terrain", directLink: true },
   { id: "maintenance-admin", name: "Maintenance Admin", url: "https://maintenance.filtreplante.com/admin", icon: "⚙️", description: "Gestion des interventions de maintenance" },
-  { id: "construction", name: "Calculateur Construction", url: "https://construction-fp.replit.app", icon: "🏗️", description: "Outil de calcul de matériaux pour projets de construction" },
+  { id: "construction", name: "Calculateur Construction", url: "https://calculateur-construction-filtreplante.replit.app", icon: "🏗️", description: "Outil de calcul de matériaux pour projets de construction" },
 ];
 
 const FACTURES_USER_LINKS: Record<string, string> = {
