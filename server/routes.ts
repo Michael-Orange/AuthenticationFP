@@ -13,7 +13,10 @@ const DEFAULT_APPS: AppInfo[] = [
   { id: "maintenance", name: "Maintenance", url: "https://maintenance.filtreplante.com", icon: "🔧", description: "Suivi des interventions terrain", directLink: true },
   { id: "maintenance-admin", name: "Maintenance Admin", url: "https://maintenance.filtreplante.com/admin", icon: "⚙️", description: "Gestion des interventions de maintenance" },
   { id: "construction", name: "Calculateur Construction", url: "https://calculateur-construction-filtreplante.replit.app", icon: "🏗️", description: "Outil de calcul de matériaux pour projets de construction" },
+  { id: "shelly", name: "Shelly Collector", url: "https://shelly-collector.filtreplante.com/dashboard", icon: "📡", description: "Tableau de bord Shelly Collector", directLink: true },
 ];
+
+const SHELLY_USERS = ["michael", "marine", "fatou", "moussa"];
 
 const FACTURES_USER_LINKS: Record<string, string> = {
   michael: "https://factures-fp.replit.app/michael_66a",
@@ -295,7 +298,7 @@ export async function registerRoutes(
       const userApps = user.role === "admin"
         ? allApps
         : allApps.filter((app) =>
-            user.apps.includes(app.id) || APPS_FOR_ALL.includes(app.id)
+            user.apps.includes(app.id) || APPS_FOR_ALL.includes(app.id) || (app.id === "shelly" && SHELLY_USERS.includes(user.username))
           );
 
       const personalizedApps = userApps.map((app) => {
