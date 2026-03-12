@@ -421,7 +421,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/admin/users/:id/reset-password", requireAuth, requireAdmin, async (req, res) => {
+  app.get("/api/admin/users/:id/password", requireAuth, requireAdmin, async (req, res) => {
     const userId = parseInt(req.params.id);
 
     try {
@@ -430,14 +430,39 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Utilisateur non trouvé" });
       }
 
-      const newPassword = generateRandomPassword();
-      const encrypted = encryptPassword(newPassword);
+      const cryptoSecret = process.env.CRYPTO_SECRET;
+      if (!cryptoSecret) {
+        return res.status(500).json({ error: "CRYPTO_SECRET non configuré" });
+      }
 
+      const decrypted = CryptoJS.AES.decrypt(user.password_encrypted, cryptoSecret).toString(CryptoJS.enc.Utf8);
+      res.json({ password: decrypted });
+    } catch (error) {
+      console.error("Error decrypting password:", error);
+      res.status(500).json({ error: "Erreur serveur" });
+    }
+  });
+
+  app.post("/api/admin/users/:id/password", requireAuth, requireAdmin, async (req, res) => {
+    const userId = parseInt(req.params.id);
+    const { password } = req.body;
+
+    if (!password || password.length < 1) {
+      return res.status(400).json({ error: "Mot de passe requis" });
+    }
+
+    try {
+      const user = await storage.getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ error: "Utilisateur non trouvé" });
+      }
+
+      const encrypted = encryptPassword(password);
       await storage.updateUser(userId, { password_encrypted: encrypted });
 
-      res.json({ success: true, temporaryPassword: newPassword });
+      res.json({ success: true });
     } catch (error) {
-      console.error("Error resetting password:", error);
+      console.error("Error updating password:", error);
       res.status(500).json({ error: "Erreur serveur" });
     }
   });

@@ -103,6 +103,10 @@ export default function AdminUsersPage() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editUser, setEditUser] = useState<AdminUser | null>(null);
+  const [passwordTarget, setPasswordTarget] = useState<AdminUser | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordResult, setPasswordResult] = useState<{ username: string; password: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
   const [copied, setCopied] = useState(false);
@@ -172,20 +176,36 @@ export default function AdminUsersPage() {
     },
   });
 
-  const resetPasswordMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await apiRequest("POST", `/api/admin/users/${id}/reset-password`);
+  const changePasswordMutation = useMutation({
+    mutationFn: async ({ id, password }: { id: number; password: string }) => {
+      const res = await apiRequest("POST", `/api/admin/users/${id}/password`, { password });
       return res.json();
     },
-    onSuccess: (data, userId) => {
-      const targetUser = users?.find((u) => u.id === userId);
-      setPasswordResult({ username: targetUser?.username || "", password: data.temporaryPassword });
-      toast({ title: "Mot de passe réinitialisé" });
+    onSuccess: () => {
+      setPasswordTarget(null);
+      setCurrentPassword("");
+      setNewPassword("");
+      toast({ title: "Mot de passe modifié" });
     },
     onError: (err: any) => {
       toast({ title: "Erreur", description: err.message, variant: "destructive" });
     },
   });
+
+  const openPasswordModal = async (u: AdminUser) => {
+    setPasswordTarget(u);
+    setCurrentPassword("");
+    setNewPassword("");
+    setPasswordLoading(true);
+    try {
+      const res = await fetch(`/api/admin/users/${u.id}/password`, { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentPassword(data.password);
+      }
+    } catch {}
+    setPasswordLoading(false);
+  };
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -492,11 +512,10 @@ export default function AdminUsersPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            data-testid={`button-reset-password-${u.id}`}
-                            onClick={() => resetPasswordMutation.mutate(u.id)}
-                            disabled={resetPasswordMutation.isPending}
+                            data-testid={`button-password-${u.id}`}
+                            onClick={() => openPasswordModal(u)}
                             className="h-8 w-8 text-muted-foreground hover:text-orange-600"
-                            title="Réinitialiser mot de passe"
+                            title="Voir / modifier le mot de passe"
                           >
                             <KeyRound className="w-4 h-4" />
                           </Button>
@@ -696,25 +715,80 @@ export default function AdminUsersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Password Result Modal */}
+      {/* Password View/Edit Modal */}
+      <Dialog open={!!passwordTarget} onOpenChange={(open) => { if (!open) { setPasswordTarget(null); setCurrentPassword(""); setNewPassword(""); setCopied(false); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Mot de passe — {passwordTarget?.username}</DialogTitle>
+            <DialogDescription>
+              Mot de passe actuel et possibilité de le changer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Mot de passe actuel</Label>
+              {passwordLoading ? (
+                <Skeleton className="h-10 w-full" />
+              ) : (
+                <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+                  <code className="flex-1 font-mono text-base tracking-wider select-all" data-testid="text-current-password">
+                    {currentPassword || "—"}
+                  </code>
+                  <Button variant="ghost" size="icon" onClick={async () => { await navigator.clipboard.writeText(currentPassword); setCopied(true); setTimeout(() => setCopied(false), 2000); }} data-testid="button-copy-password">
+                    {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                </div>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="new-password" className="text-xs text-muted-foreground mb-1 block">Nouveau mot de passe (optionnel)</Label>
+              <Input
+                id="new-password"
+                data-testid="input-new-password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Laisser vide pour ne pas changer"
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => { setPasswordTarget(null); setCurrentPassword(""); setNewPassword(""); setCopied(false); }}>
+              Fermer
+            </Button>
+            {newPassword && (
+              <Button
+                data-testid="button-save-password"
+                onClick={() => passwordTarget && changePasswordMutation.mutate({ id: passwordTarget.id, password: newPassword })}
+                disabled={changePasswordMutation.isPending}
+                className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white"
+              >
+                {changePasswordMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
+                Enregistrer
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Password Result Modal (after user creation) */}
       <Dialog open={!!passwordResult} onOpenChange={(open) => { if (!open) { setPasswordResult(null); setCopied(false); } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Mot de passe</DialogTitle>
+            <DialogTitle>Utilisateur créé</DialogTitle>
             <DialogDescription>
-              Communiquez ce mot de passe de manière sécurisée à l'utilisateur <strong>{passwordResult?.username}</strong>.
+              Communiquez ce mot de passe à l'utilisateur <strong>{passwordResult?.username}</strong>.
             </DialogDescription>
           </DialogHeader>
           <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
             <code className="flex-1 font-mono text-lg tracking-wider select-all" data-testid="text-password-result">
               {passwordResult?.password}
             </code>
-            <Button variant="ghost" size="icon" onClick={copyPassword} data-testid="button-copy-password">
+            <Button variant="ghost" size="icon" onClick={copyPassword} data-testid="button-copy-password-result">
               {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
             </Button>
           </div>
           <DialogFooter>
-            <Button onClick={() => { setPasswordResult(null); setCopied(false); }} data-testid="button-close-password"
+            <Button onClick={() => { setPasswordResult(null); setCopied(false); }}
               className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white">
               Fermer
             </Button>
