@@ -1,0 +1,434 @@
+# BRIEF PORTAIL AUTH - Interface Administration Utilisateurs
+
+## 🎯 OBJECTIF
+
+Créer une interface complète de gestion des utilisateurs dans le portail Auth pour centraliser l'administration. Cette interface remplacera celle actuellement présente dans l'app "Référentiel Produits Fournisseurs".
+
+## 📊 CONTEXTE
+
+**Architecture actuelle du portail Auth** :
+- Chiffrement AES avec CryptoJS (déjà en place dans `server/routes.ts`)
+- Variable `CRYPTO_SECRET` déjà configurée
+- Routes dans `server/routes.ts` (pas de fichier séparé)
+- Pas de sidebar actuellement (lien dans le header suffisant)
+- JWT recalculé au prochain login (comportement existant à conserver)
+
+**Table** : `referentiel.users` (base Neon partagée)
+
+**Colonnes concernées** :
+- id, username, nom, email, password_encrypted
+- peut_acces_stock, peut_acces_prix, peut_acces_construction, peut_admin_maintenance
+- role ("admin" ou "user"), actif (boolean)
+- date_creation, derniere_connexion, created_by, updated_at
+
+**4 permissions apps** :
+1. Stock (`peut_acces_stock`)
+2. Prix (`peut_acces_prix`)
+3. Construction (`peut_acces_construction`)
+4. Maintenance Admin (`peut_admin_maintenance`)
+
+## 🔧 SPÉCIFICATIONS FONCTIONNELLES
+
+### 1. Protection de la route admin
+
+**Route** : `/admin/users`
+
+**Accès** :
+- Uniquement `role = 'admin'` (Michael et Marine)
+- Middleware : vérifier `req.user.role === 'admin'`
+- Si non-admin : rediriger vers dashboard avec message "Accès refusé"
+- **Invisible pour les utilisateurs normaux** (pas de lien dans la navigation)
+
+### 2. Page de gestion des utilisateurs
+
+**URL** : `/admin/users`
+
+**Fichier unique** : `client/src/pages/admin-users.tsx` (tout dans un seul fichier, pas de composants séparés)
+
+**Affichage** :
+- Titre : "Gestion des Utilisateurs"
+- Bouton "+ Nouvel utilisateur" en haut à droite
+- Tableau avec colonnes :
+  - Username
+  - Nom
+  - Email
+  - Rôle (Badge "Admin" bleu ou "User" gris)
+  - Applications autorisées (Badges : Stock 📦, Prix 💰, Construction 🏗️, Maintenance Admin 🔧)
+  - Statut (Badge "Actif" vert ou "Inactif" gris)
+  - Dernière connexion (format relatif : "Il y a 2 jours")
+  - Actions (Modifier, Réinitialiser MDP, Toggle Actif/Inactif, Supprimer)
+
+**Fonctionnalités** :
+- Recherche par username ou nom (input de recherche)
+- Filtre par rôle (All / Admin / User)
+- Filtre par statut (All / Actif / Inactif)
+- Tri par colonne cliquable
+
+**Actions par ligne** :
+- Icône "Modifier" → ouvre modal d'édition
+- Icône "Réinitialiser MDP" → génère nouveau mot de passe, affiche dans modal
+- Toggle switch "Actif/Inactif" → inverse le statut
+- Icône "Supprimer" (avec confirmation)
+
+### 3. Modal de création d'utilisateur
+
+**Trigger** : Clic sur "+ Nouvel utilisateur"
+
+**Champs** :
+- Username* (text, unique)
+- Nom complet* (text)
+- Email (email, optional, unique si fourni)
+- Mot de passe* (text, min 8 caractères)
+- Confirmation mot de passe* (text, doit matcher)
+- Rôle* (select : "User" par défaut ou "Admin")
+- Compte actif (checkbox, coché par défaut)
+
+**Permissions apps** (4 checkboxes) :
+- ☐ Accès Stock
+- ☐ Accès Prix
+- ☐ Accès Construction
+- ☐ Administration Maintenance
+
+**Validation** :
+- Username unique (vérifier côté backend)
+- Email unique si fourni
+- Mot de passe >= 8 caractères
+- Confirmation identique au mot de passe
+
+**Au submit** :
+- Chiffrer le mot de passe avec CryptoJS (même logique que dans le portail Auth actuel)
+- Insérer dans `referentiel.users`
+- Remplir `created_by` avec username de l'admin connecté
+- Remplir `date_creation` et `updated_at` automatiquement (default now())
+- Afficher une modal de confirmation avec le mot de passe en clair (à communiquer à l'utilisateur)
+- Permettre de copier le mot de passe dans le presse-papier
+- Fermer les modals et rafraîchir la liste
+
+### 4. Modal d'édition d'utilisateur
+
+**Trigger** : Clic sur l'icône "Modifier"
+
+**Champs modifiables** :
+- Nom complet
+- Email
+- Rôle (Admin / User)
+- Compte actif (checkbox)
+- Permissions apps (4 checkboxes identiques à la création)
+
+**Champs en lecture seule** :
+- Username (affiché mais non modifiable)
+- Date de création
+- Dernière connexion
+
+**Protections** :
+- Un admin ne peut pas se retirer le rôle admin lui-même
+- Un admin ne peut pas se désactiver lui-même
+- Messages d'erreur si tentative
+
+**Au submit** :
+- Mettre à jour les champs modifiés
+- Remplir `updated_at` avec timestamp actuel
+- Fermer modal et rafraîchir la liste
+
+**Note importante** : Les nouvelles permissions sont prises en compte au prochain login de l'utilisateur (le JWT est recalculé à chaque login, comportement existant).
+
+### 5. Réinitialisation de mot de passe
+
+**Trigger** : Clic sur l'icône "Réinitialiser MDP"
+
+**Comportement** :
+- Générer un mot de passe aléatoire sécurisé (12 caractères : majuscules, minuscules, chiffres, symboles)
+- Chiffrer avec CryptoJS (même logique que le portail Auth actuel)
+- Mettre à jour `password_encrypted` en base
+- Mettre à jour `updated_at`
+- Afficher une modal avec le nouveau mot de passe en clair
+- Permettre de copier dans le presse-papier
+- Message : "Mot de passe réinitialisé pour [username]. Communiquez ce mot de passe de manière sécurisée à l'utilisateur."
+
+### 6. Toggle Actif/Inactif
+
+**Trigger** : Clic sur le toggle switch à côté du statut
+
+**Comportement** :
+- Inverser la valeur de `actif` en base (true ↔ false)
+- Mettre à jour `updated_at`
+- Si passage à `false` : l'utilisateur ne pourra plus se connecter (vérification dans le flow SSO du portail Auth)
+- Afficher un toast de confirmation : "Le compte [username] a été [activé/désactivé]"
+
+**Protection** :
+- Un admin ne peut pas se désactiver lui-même
+- Message d'erreur si tentative
+
+### 7. Suppression d'utilisateur
+
+**Trigger** : Clic sur l'icône "Supprimer"
+
+**Comportement** :
+- Afficher une confirmation : "Êtes-vous sûr de vouloir supprimer l'utilisateur [username] ? Cette action est irréversible."
+- Si confirmé : supprimer la ligne de `referentiel.users`
+- Rafraîchir la liste
+
+**Protections** :
+- Un admin ne peut pas se supprimer lui-même
+- Message d'erreur si tentative
+
+## 🔧 IMPLÉMENTATION TECHNIQUE
+
+### Backend - Routes API
+
+**Fichier** : `server/routes.ts` (ajouter les routes dans le fichier existant, PAS de fichier séparé)
+
+**Nouvelles routes** :
+
+```typescript
+// Liste tous les utilisateurs (admin only)
+app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
+  // SELECT * FROM referentiel.users (sans password_encrypted)
+  // Retourne : Array<User>
+});
+
+// Créer un utilisateur (admin only)
+app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
+  // Body : { username, nom, email?, password, role, actif, permissions }
+  // Chiffrer le mot de passe avec CryptoJS (même logique que dans le portail)
+  // INSERT INTO referentiel.users
+  // Retourne : { success: true, user: User, temporaryPassword: string }
+});
+
+// Mettre à jour un utilisateur (admin only)
+app.patch('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) => {
+  // Body : { nom?, email?, role?, actif?, permissions? }
+  // Vérifier que l'admin ne se retire pas son propre rôle admin
+  // Vérifier que l'admin ne se désactive pas lui-même
+  // UPDATE referentiel.users SET ... WHERE id = :id
+  // Retourne : { success: true, user: User }
+});
+
+// Réinitialiser mot de passe (admin only)
+app.post('/api/admin/users/:id/reset-password', requireAuth, requireAdmin, async (req, res) => {
+  // Générer mot de passe aléatoire
+  // Chiffrer avec CryptoJS
+  // UPDATE referentiel.users SET password_encrypted = ... WHERE id = :id
+  // Retourne : { success: true, temporaryPassword: string }
+});
+
+// Supprimer un utilisateur (admin only)
+app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) => {
+  // Vérifier que l'admin ne se supprime pas lui-même
+  // DELETE FROM referentiel.users WHERE id = :id
+  // Retourne : { success: true }
+});
+```
+
+**Middleware requireAdmin** (à créer si inexistant) :
+```typescript
+function requireAdmin(req, res, next) {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Accès refusé : droits administrateur requis' });
+  }
+  next();
+}
+```
+
+### Frontend - Page unique
+
+**Fichier** : `client/src/pages/admin-users.tsx`
+
+**Structure** : Tout dans un seul fichier (pas de composants séparés) :
+- Composant principal `AdminUsersPage`
+- Modal création d'utilisateur (inline)
+- Modal édition d'utilisateur (inline)
+- Modal affichage mot de passe (inline)
+- Tableau utilisateurs (inline)
+- Badges pour les apps (inline ou fonction helper)
+
+**Hooks/API** :
+```typescript
+// Récupérer les utilisateurs
+const { data: users, isLoading, refetch } = useQuery({
+  queryKey: ['admin-users'],
+  queryFn: () => fetch('/api/admin/users').then(r => r.json())
+});
+
+// Créer
+const createUser = useMutation({
+  mutationFn: (userData) => fetch('/api/admin/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(userData)
+  }).then(r => r.json()),
+  onSuccess: () => refetch()
+});
+
+// Modifier
+const updateUser = useMutation({
+  mutationFn: ({ id, ...data }) => fetch(`/api/admin/users/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(r => r.json()),
+  onSuccess: () => refetch()
+});
+
+// Réinitialiser mot de passe
+const resetPassword = useMutation({
+  mutationFn: (userId) => fetch(`/api/admin/users/${userId}/reset-password`, {
+    method: 'POST'
+  }).then(r => r.json())
+});
+
+// Supprimer
+const deleteUser = useMutation({
+  mutationFn: (userId) => fetch(`/api/admin/users/${userId}`, {
+    method: 'DELETE'
+  }).then(r => r.json()),
+  onSuccess: () => refetch()
+});
+```
+
+### Navigation
+
+**Ajouter un lien dans le header** (PAS de sidebar) :
+
+**Condition d'affichage** : Uniquement si `user.role === 'admin'`
+
+**Lien** : "👥 Gestion Utilisateurs" → `/admin/users`
+
+**Emplacement** : À côté du nom de l'utilisateur ou dans un menu dropdown
+
+### Protection route frontend
+
+**Ajouter dans le router** :
+```typescript
+{
+  path: '/admin/users',
+  element: (
+    <ProtectedRoute requireAdmin>
+      <AdminUsersPage />
+    </ProtectedRoute>
+  )
+}
+```
+
+**Composant ProtectedRoute** (si inexistant) :
+```typescript
+function ProtectedRoute({ children, requireAdmin = false }) {
+  const { user, isLoading } = useAuth();
+  
+  if (isLoading) return <div>Chargement...</div>;
+  
+  if (!user) {
+    return <Navigate to="/login" />;
+  }
+  
+  if (requireAdmin && user.role !== 'admin') {
+    return <Navigate to="/dashboard" />;
+  }
+  
+  return children;
+}
+```
+
+## 🎨 INTERFACE UTILISATEUR
+
+**Style** : Cohérent avec le design actuel du portail Auth
+
+**Badges apps** (couleurs suggérées) :
+- Stock 📦 : Badge bleu
+- Prix 💰 : Badge vert
+- Construction 🏗️ : Badge orange
+- Maintenance Admin 🔧 : Badge rouge
+
+**Badges statut** :
+- Actif : Badge vert
+- Inactif : Badge gris
+
+**Badges rôle** :
+- Admin : Badge bleu foncé
+- User : Badge gris clair
+
+## ⚠️ POINTS D'ATTENTION
+
+1. **Chiffrement des mots de passe** :
+   - Réutiliser la logique CryptoJS existante dans `server/routes.ts`
+   - Variable `CRYPTO_SECRET` déjà configurée dans le portail Auth
+   - Ne PAS copier de fichier depuis l'app Produits
+
+2. **Architecture** :
+   - Routes API dans `server/routes.ts` (pas de fichier séparé)
+   - Page frontend dans un seul fichier `admin-users.tsx` (pas de composants séparés)
+   - Lien dans le header (pas de sidebar)
+
+3. **JWT et permissions** :
+   - Les nouvelles permissions sont prises en compte au prochain login
+   - Le JWT est recalculé à chaque login (comportement existant)
+   - Pas besoin de modifier ce flow
+
+4. **Protections** :
+   - Un admin ne peut pas se retirer son propre rôle admin
+   - Un admin ne peut pas se désactiver lui-même
+   - Un admin ne peut pas se supprimer lui-même
+   - Vérifier côté backend ET frontend
+
+5. **Validation** :
+   - Username unique (contrainte UNIQUE en base)
+   - Email unique si fourni (contrainte UNIQUE en base)
+   - Gérer les erreurs de violation de contrainte
+
+6. **UX mot de passe temporaire** :
+   - Afficher clairement après création/réinitialisation
+   - Bouton de copie dans le presse-papier
+   - Message pour communiquer de manière sécurisée
+
+7. **Dernière connexion** :
+   - Le flow SSO existant met déjà à jour `derniere_connexion`
+   - Afficher au format relatif ("Il y a 2 jours" plutôt que timestamp brut)
+
+8. **Vérification du statut actif** :
+   - Le flow SSO doit vérifier `actif = true` avant de créer une session
+   - Si `actif = false`, refuser la connexion avec message approprié
+
+## ✅ CHECKLIST POST-IMPLÉMENTATION
+
+**Backend** :
+- [ ] Routes `/api/admin/users/*` ajoutées dans `server/routes.ts`
+- [ ] Middleware `requireAdmin` créé et appliqué
+- [ ] Chiffrement CryptoJS réutilisé (pas de copie depuis Produits)
+- [ ] Génération de mots de passe aléatoires sécurisés
+- [ ] Protections contre auto-modification/suppression/désactivation
+- [ ] Vérification unicité username/email avec gestion d'erreur
+- [ ] Vérification `actif = true` dans le flow SSO
+
+**Frontend** :
+- [ ] Page `/admin/users` dans un seul fichier
+- [ ] Lien dans le header (visible uniquement pour admins)
+- [ ] Route protégée (admin uniquement)
+- [ ] Tableau avec toutes les colonnes
+- [ ] Badges apps, statut, rôle avec bonnes couleurs
+- [ ] Modal création fonctionnelle
+- [ ] Modal édition fonctionnelle
+- [ ] Modal mot de passe avec copie
+- [ ] Confirmation suppression
+- [ ] Toggle actif/inactif
+- [ ] Recherche et filtres
+
+**Tests** :
+- [ ] Michael peut créer un utilisateur → mot de passe affiché
+- [ ] Michael peut modifier les permissions d'un utilisateur
+- [ ] Les nouvelles permissions sont appliquées au prochain login
+- [ ] Michael peut réinitialiser un mot de passe
+- [ ] Michael ne peut pas se supprimer lui-même (erreur affichée)
+- [ ] Michael ne peut pas se retirer le rôle admin (erreur affichée)
+- [ ] Michael ne peut pas se désactiver (erreur affichée)
+- [ ] Marine a les mêmes accès que Michael
+- [ ] Un utilisateur désactivé ne peut plus se connecter via SSO
+- [ ] Un utilisateur avec `peut_acces_stock = false` ne voit pas l'app Stock
+- [ ] Suppression d'un utilisateur empêche toute connexion future
+
+**Configuration** :
+- [ ] Variable `CRYPTO_SECRET` déjà en place (rien à faire)
+- [ ] Documentation mise à jour si nécessaire
+
+---
+
+**NOTE IMPORTANTE** : Les permissions modifiées sont prises en compte au prochain login de l'utilisateur. Le JWT contient les permissions et est recalculé à chaque login. Ce comportement existant est correct et ne nécessite aucune modification.
