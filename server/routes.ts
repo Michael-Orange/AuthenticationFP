@@ -371,7 +371,7 @@ export async function registerRoutes(
       });
 
       const { password_encrypted, ...sanitized } = newUser;
-      res.json({ success: true, user: sanitized, temporaryPassword: password });
+      res.json({ success: true, user: sanitized, password });
     } catch (error: any) {
       if (error.code === "23505") {
         return res.status(409).json({ error: "Username ou email déjà utilisé" });

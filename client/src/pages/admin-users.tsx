@@ -139,7 +139,7 @@ export default function AdminUsersPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       setCreateOpen(false);
-      setPasswordResult({ username: data.user.username, password: data.temporaryPassword });
+      setPasswordResult({ username: data.user.username, password: data.password });
       toast({ title: "Utilisateur créé", description: `${data.user.nom} a été ajouté.` });
     },
     onError: (err: any) => {
