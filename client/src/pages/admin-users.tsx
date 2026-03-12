@@ -86,10 +86,10 @@ function formatRelativeDate(dateStr: string | null): string {
 }
 
 const APP_BADGES = [
-  { key: "peut_acces_stock", label: "Stock", icon: "📦", color: "bg-blue-100 text-blue-800 border-blue-200" },
-  { key: "peut_acces_prix", label: "Prix", icon: "💰", color: "bg-emerald-100 text-emerald-800 border-emerald-200" },
-  { key: "peut_acces_construction", label: "Construction", icon: "🏗️", color: "bg-orange-100 text-orange-800 border-orange-200" },
-  { key: "peut_admin_maintenance", label: "Maint. Admin", icon: "🔧", color: "bg-red-100 text-red-800 border-red-200" },
+  { key: "peut_acces_stock", label: "Stock", icon: "📦", color: "bg-slate-100 text-slate-600 border-slate-200" },
+  { key: "peut_acces_prix", label: "Prix", icon: "💰", color: "bg-stone-100 text-stone-600 border-stone-200" },
+  { key: "peut_acces_construction", label: "Construction", icon: "🏗️", color: "bg-zinc-100 text-zinc-600 border-zinc-200" },
+  { key: "peut_admin_maintenance", label: "Maint. Admin", icon: "🔧", color: "bg-neutral-100 text-neutral-600 border-neutral-200" },
 ] as const;
 
 export default function AdminUsersPage() {
