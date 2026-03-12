@@ -1,0 +1,102 @@
+# BRIEF PORTAIL AUTH - Ajout accès Shelly Collector
+
+## 🎯 OBJECTIF
+Ajouter la gestion des permissions pour l'application Shelly Collector dans le portail SSO FiltrePlante.
+
+## 📊 ACTIONS À RÉALISER
+
+### 1. Migration BDD - Ajout colonne permission
+
+**Exécuter cette migration SQL** :
+
+```sql
+-- Ajouter la colonne peut_acces_shelly
+ALTER TABLE referentiel.users 
+ADD COLUMN peut_acces_shelly BOOLEAN DEFAULT FALSE;
+
+-- Donner accès uniquement à Michael et Marine
+UPDATE referentiel.users 
+SET peut_acces_shelly = TRUE 
+WHERE username IN ('michael', 'marine');
+```
+
+### 2. Mise à jour du schéma Drizzle
+
+**Fichier** : `shared/schema.ts` (ou équivalent selon ta structure)
+
+**Action** : Ajouter `peut_acces_shelly` au schéma users
+
+```typescript
+export const users = pgTable('users', {
+  // ... colonnes existantes
+  peut_acces_shelly: boolean('peut_acces_shelly').default(false),
+});
+```
+
+### 3. Mise à jour de la configuration des apps
+
+**Fichier** : Fichier où se trouve `DEFAULT_APPS` (probablement dans la config)
+
+**Action** : Ajouter l'app Shelly dans la liste
+
+```typescript
+{
+  id: 'shelly',
+  nom: 'Shelly Collector',
+  description: 'Configuration et suivi des équipements Shelly Pro 4PM',
+  url: 'https://shelly-collector.filtreplante.com',
+  icon: '⚡', // ou icône de ton choix
+  permission: 'peut_acces_shelly'
+}
+```
+
+### 4. Mise à jour de la génération du token SSO
+
+**Vérifier** que le token JWT généré lors de la redirection SSO inclut bien `peut_acces_shelly` dans le payload.
+
+Le token doit contenir :
+```typescript
+{
+  type: 'sso',
+  userId: user.id,
+  username: user.username,
+  nom: user.nom,
+  role: user.role,
+  // ... autres champs existants
+  peut_acces_shelly: user.peut_acces_shelly
+}
+```
+
+### 5. Mise à jour de l'interface admin utilisateurs
+
+**Fichier** : `client/src/pages/admin-users.tsx`
+
+**Action** : Ajouter un checkbox "Accès Shelly Collector" dans les formulaires de création/édition d'utilisateur
+
+**Dans le formulaire de permissions** :
+```tsx
+<label>
+  <input 
+    type="checkbox" 
+    checked={permissions.peut_acces_shelly}
+    onChange={...}
+  />
+  ⚡ Accès Shelly Collector
+</label>
+```
+
+**Badge dans le tableau** : Ajouter badge "Shelly ⚡" (couleur violette/électrique) pour les utilisateurs ayant accès
+
+## ✅ CHECKLIST DE VALIDATION
+- [ ] Migration SQL exécutée avec succès
+- [ ] Colonne `peut_acces_shelly` visible dans `referentiel.users`
+- [ ] Michael et Marine ont `peut_acces_shelly = TRUE`
+- [ ] App Shelly Collector apparaît dans la liste des apps du portail (uniquement pour Michael/Marine)
+- [ ] Checkbox "Accès Shelly" présent dans l'interface admin utilisateurs
+- [ ] Badge "Shelly" s'affiche dans le tableau pour les utilisateurs autorisés
+- [ ] Clic sur l'app Shelly redirige vers l'URL avec un token SSO valide
+
+## 📝 NOTES
+- Cette modification est côté **portail Auth uniquement**
+- L'app Shelly elle-même devra être modifiée séparément (brief 2)
+- Le token SSO contiendra la permission `peut_acces_shelly`
