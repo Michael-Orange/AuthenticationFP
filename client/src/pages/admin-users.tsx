@@ -62,6 +62,7 @@ interface AdminUser {
   peut_acces_prix: boolean;
   peut_acces_construction: boolean;
   peut_admin_maintenance: boolean;
+  peut_acces_shelly: boolean;
   role: string;
   actif: boolean;
   date_creation: string;
