@@ -1,0 +1,77 @@
+# BRIEF PORTAIL AUTH - Ajout accès Construction
+
+## 🎯 OBJECTIF
+Ajouter la gestion des permissions pour l'application Construction dans le portail SSO FiltrePlante.
+
+## 📊 ACTIONS À RÉALISER
+
+### 1. Migration BDD - Ajout colonne permissions
+**Fichier** : Créer une nouvelle migration SQL
+
+**Action** : Ajouter la colonne `peut_acces_construction` dans `referentiel.users`
+
+```sql
+ALTER TABLE referentiel.users 
+ADD COLUMN peut_acces_construction BOOLEAN DEFAULT FALSE;
+
+-- Donner accès uniquement à Michael et Marine
+UPDATE referentiel.users 
+SET peut_acces_construction = TRUE 
+WHERE username IN ('michael', 'marine');
+```
+
+### 2. Mise à jour du modèle utilisateur
+**Fichier** : `db/schema.ts` (ou équivalent selon ta structure)
+
+**Action** : Ajouter `peut_acces_construction` au schéma Drizzle
+
+```typescript
+export const users = pgTable('users', {
+  // ... colonnes existantes
+  peut_acces_construction: boolean('peut_acces_construction').default(false),
+});
+```
+
+### 3. Mise à jour de la configuration des apps
+**Fichier** : Fichier où se trouve `DEFAULT_APPS` (probablement `config/apps.ts` ou similaire)
+
+**Action** : Ajouter l'app Construction dans la liste des apps disponibles
+
+```typescript
+{
+  id: 'construction',
+  nom: 'Calculateur Construction',
+  description: 'Outil de calcul de matériaux pour projets de construction',
+  url: 'https://[URL_APP_CONSTRUCTION].replit.app',
+  icon: '🏗️', // ou l'icône de ton choix
+  permission: 'peut_acces_construction'
+}
+```
+
+### 4. Mise à jour de la génération du token SSO
+**Fichier** : Route de redirection SSO (probablement dans `routes/sso.ts` ou `routes/auth.ts`)
+
+**Action** : Vérifier que `peut_acces_construction` est bien inclus dans le payload JWT lors de la génération du token
+
+Le token doit contenir :
+```typescript
+{
+  type: 'sso',
+  userId: user.id,
+  username: user.username,
+  // ... autres champs
+  peut_acces_construction: user.peut_acces_construction
+}
+```
+
+## ✅ CHECKLIST DE VALIDATION
+- [ ] Migration SQL exécutée avec succès
+- [ ] Colonne visible dans la table `referentiel.users`
+- [ ] Michael et Marine ont `peut_acces_construction = TRUE`
+- [ ] App Construction apparaît dans la liste des apps du portail (uniquement pour Michael/Marine)
+- [ ] Clic sur l'app Construction redirige vers l'URL avec un token SSO valide
+
+## 📝 NOTES
+- Cette modification est côté **portail Auth uniquement**
+- L'app Construction elle-même devra être modifiée séparément pour consommer ce token (brief séparé)
+- Pense à tester la génération du token avec un utilisateur qui a l'accès vs un qui ne l'a pas
