@@ -90,6 +90,7 @@ const APP_BADGES = [
   { key: "peut_acces_prix", label: "Prix", icon: "💰", color: "bg-stone-100 text-stone-600 border-stone-200" },
   { key: "peut_acces_construction", label: "Construction", icon: "🏗️", color: "bg-zinc-100 text-zinc-600 border-zinc-200" },
   { key: "peut_admin_maintenance", label: "Maint. Admin", icon: "🔧", color: "bg-neutral-100 text-neutral-600 border-neutral-200" },
+  { key: "peut_acces_shelly", label: "Shelly Admin", icon: "⚡", color: "bg-amber-50 text-amber-700 border-amber-200" },
 ] as const;
 
 export default function AdminUsersPage() {
@@ -123,6 +124,7 @@ export default function AdminUsersPage() {
     peut_acces_prix: false,
     peut_acces_construction: false,
     peut_admin_maintenance: false,
+    peut_acces_shelly: false,
   });
 
   const { data: users, isLoading: usersLoading } = useQuery<AdminUser[]>({
@@ -241,6 +243,7 @@ export default function AdminUsersPage() {
       role: "user", actif: true,
       peut_acces_stock: false, peut_acces_prix: false,
       peut_acces_construction: false, peut_admin_maintenance: false,
+      peut_acces_shelly: false,
     });
   };
 
@@ -269,6 +272,7 @@ export default function AdminUsersPage() {
         peut_acces_prix: formData.peut_acces_prix,
         peut_acces_construction: formData.peut_acces_construction,
         peut_admin_maintenance: formData.peut_admin_maintenance,
+        peut_acces_shelly: formData.peut_acces_shelly,
       },
     });
   };
@@ -286,6 +290,7 @@ export default function AdminUsersPage() {
         peut_acces_prix: formData.peut_acces_prix,
         peut_acces_construction: formData.peut_acces_construction,
         peut_admin_maintenance: formData.peut_admin_maintenance,
+        peut_acces_shelly: formData.peut_acces_shelly,
       },
     });
   };
@@ -303,6 +308,7 @@ export default function AdminUsersPage() {
       peut_acces_prix: u.peut_acces_prix,
       peut_acces_construction: u.peut_acces_construction,
       peut_admin_maintenance: u.peut_admin_maintenance,
+      peut_acces_shelly: u.peut_acces_shelly,
     });
     setEditUser(u);
   };

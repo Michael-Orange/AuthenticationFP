@@ -14,6 +14,7 @@ const DEFAULT_APPS: AppInfo[] = [
   { id: "maintenance-admin", name: "Maintenance Admin", url: "https://maintenance.filtreplante.com/admin", icon: "⚙️", description: "Gestion des interventions de maintenance" },
   { id: "construction", name: "Calculateur Construction", url: "https://calculateur-construction-filtreplante.replit.app", icon: "🏗️", description: "Outil de calcul de matériaux pour projets de construction" },
   { id: "shelly", name: "Shelly Collector", url: "https://shelly-collector.filtreplante.com/dashboard", icon: "📡", description: "Tableau de bord Shelly Collector", directLink: true },
+  { id: "shelly-admin", name: "Shelly Admin", url: "https://shelly-collector.filtreplante.com", icon: "⚡", description: "Administration Shelly Collector" },
 ];
 
 const SHELLY_USERS = ["michael", "marine", "fatou", "moussa"];
@@ -255,6 +256,7 @@ export async function registerRoutes(
           nom: user.nom,
           role: user.role,
           apps: user.apps,
+          peut_acces_shelly: user.apps.includes("shelly-admin"),
           type: "sso",
           targetApp: appId,
         },
@@ -367,6 +369,7 @@ export async function registerRoutes(
         peut_acces_prix: permissions?.peut_acces_prix || false,
         peut_acces_construction: permissions?.peut_acces_construction || false,
         peut_admin_maintenance: permissions?.peut_admin_maintenance || false,
+        peut_acces_shelly: permissions?.peut_acces_shelly || false,
         created_by: adminUser.username,
       });
 
@@ -406,6 +409,7 @@ export async function registerRoutes(
         if (permissions.peut_acces_prix !== undefined) updateData.peut_acces_prix = permissions.peut_acces_prix;
         if (permissions.peut_acces_construction !== undefined) updateData.peut_acces_construction = permissions.peut_acces_construction;
         if (permissions.peut_admin_maintenance !== undefined) updateData.peut_admin_maintenance = permissions.peut_admin_maintenance;
+        if (permissions.peut_acces_shelly !== undefined) updateData.peut_acces_shelly = permissions.peut_acces_shelly;
       }
 
       const updated = await storage.updateUser(userId, updateData);
