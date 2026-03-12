@@ -91,7 +91,7 @@ const APP_BADGES = [
   { key: "peut_acces_prix", label: "Prix", icon: "💰", color: "bg-stone-100 text-stone-600 border-stone-200" },
   { key: "peut_acces_construction", label: "Construction", icon: "🏗️", color: "bg-zinc-100 text-zinc-600 border-zinc-200" },
   { key: "peut_admin_maintenance", label: "Maint. Admin", icon: "🔧", color: "bg-neutral-100 text-neutral-600 border-neutral-200" },
-  { key: "peut_acces_shelly", label: "Shelly Admin", icon: "⚡", color: "bg-amber-50 text-amber-700 border-amber-200" },
+  { key: "peut_acces_shelly", label: "Shelly Admin", icon: "⚡", color: "bg-gray-100 text-gray-600 border-gray-200" },
 ] as const;
 
 export default function AdminUsersPage() {
