@@ -256,7 +256,7 @@ export async function registerRoutes(
           nom: user.nom,
           role: user.role,
           apps: user.apps,
-          peut_acces_shelly: user.apps.includes("shelly-admin"),
+          peut_acces_shelly: user.role === "admin" || user.apps.includes("shelly-admin"),
           type: "sso",
           targetApp: appId,
         },
